@@ -90,7 +90,7 @@ button{cursor:pointer}
 .p-dec li+li{margin-top:6px}
 .p-dec b{color:var(--ink)}
 .p-kbd{font-size:12px;color:var(--ink-2);margin:0}
-.btn.sm{min-height:38px;font-size:13.5px;width:auto;padding:0 14px}
+.btn.sm{min-height:44px;font-size:13.5px;width:auto;padding:0 14px}
 
 /* ---------- App ---------- */
 .app{position:absolute;inset:0;display:flex;flex-direction:column;font-size:calc(15px * var(--scale,1));background:var(--app);color:var(--ink);line-height:1.4;overflow:hidden}
@@ -99,6 +99,9 @@ button{cursor:pointer}
 @media (prefers-reduced-motion: reduce){.app *,.app *::before,.app *::after{animation:none!important;transition:none!important}}
 .screen{flex:1;display:flex;flex-direction:column;min-height:0;position:relative}
 .scroll{flex:1;overflow-y:auto;min-height:0;padding:4px 20px 20px;display:flex;flex-direction:column;gap:16px}
+/* Les blocs d'une page qui défile gardent leur taille : sans cela, sur petit écran, ils étaient écrasés à zéro (listes invisibles). */
+.scroll>*,.locked>*,.sheet>*,.msgs>*{flex-shrink:0}
+.scroll{-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .topbar{display:flex;align-items:center;gap:8px;padding:12px 12px 6px;min-height:58px}
 .tb-title{flex:1;text-align:center;font-weight:700;font-size:1.02em;margin:0}
 .sp{width:44px;flex:none}
@@ -109,8 +112,9 @@ button{cursor:pointer}
 .h2{font-family:var(--font-display);font-size:1.3em;line-height:1.2;font-weight:700;color:var(--title);margin:0;text-wrap:balance}
 .h3{font-size:1.02em;font-weight:700;margin:0;color:var(--ink)}
 .lead{margin:0;color:var(--ink-2);line-height:1.5}
-.fine{margin:0;font-size:.8em;color:var(--ink-2);text-align:center;line-height:1.45}
-.inline-link{background:none;border:0;padding:0;color:var(--primary-text);text-decoration:underline;font-weight:600}
+.fine{margin:0;font-size:.8em;color:var(--ink-2);text-align:center;line-height:2.4}
+.fine .inline-link{padding:.5em 0;margin:-.5em 0}
+.inline-link{background:none;border:0;padding:.8em 0;margin:-.8em 0;display:inline-block;color:var(--primary-text);text-decoration:underline;font-weight:600}
 .lbl{font-size:.74em;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--ink-2)}
 
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:3.25em;padding:0 1.3em;border-radius:999px;font-weight:700;font-size:1em;border:1.5px solid transparent;width:100%;text-align:center;line-height:1.15}
@@ -136,12 +140,12 @@ button{cursor:pointer}
 .otp{font-size:1.6em;letter-spacing:.5em;text-align:center;font-variant-numeric:tabular-nums;font-weight:700}
 
 .seg{display:grid;grid-template-columns:1fr 1fr;background:var(--surface-2);border-radius:999px;padding:4px}
-.seg button{border:0;background:transparent;border-radius:999px;min-height:2.8em;font-weight:600;color:var(--ink-2)}
+.seg button{border:0;background:transparent;border-radius:999px;min-height:44px;font-weight:600;color:var(--ink-2)}
 .seg button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-sm)}
 .seg3{grid-template-columns:repeat(3,1fr)}
 
 .chips{display:flex;flex-wrap:wrap;gap:8px}
-.chip{display:inline-flex;align-items:center;gap:6px;padding:.5em .9em;border-radius:999px;background:var(--surface-2);font-size:.9em;font-weight:500;border:1.5px solid transparent;color:var(--ink);min-height:2.6em}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:.5em .9em;border-radius:999px;background:var(--surface-2);font-size:.9em;font-weight:500;border:1.5px solid transparent;color:var(--ink);min-height:44px}
 button.chip:hover{border-color:var(--line-strong)}
 .chip[aria-pressed=true]{background:var(--primary-soft);border-color:var(--primary);color:var(--primary-text);font-weight:600}
 .chip.common{background:var(--trust-soft);color:var(--trust-text)}
@@ -223,7 +227,7 @@ label.slot:hover{border-color:var(--primary)}
 /* App chrome */
 .apphead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px 6px;min-height:58px}
 .ah-title{font-family:var(--font-display);font-size:1.6em;font-weight:700;color:var(--title);margin:0 0 0 6px}
-.hbtn{display:flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:0 .85em;min-height:2.75em;font-weight:600;font-size:.85em;color:var(--ink)}
+.hbtn{display:flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:0 .85em;min-height:44px;font-weight:600;font-size:.85em;color:var(--ink)}
 .hbtn:hover{border-color:var(--line-strong)}
 .wm{display:flex;align-items:center;gap:5px;color:var(--primary)}
 .wm span{font-family:var(--font-display);font-weight:800;font-size:1.45em;color:var(--title);letter-spacing:-.03em}
@@ -246,7 +250,7 @@ label.slot:hover{border-color:var(--primary)}
 .bars span.on{background:#fff}
 .tap{position:absolute;top:0;bottom:45%;width:45%;z-index:2;border:0;background:transparent}
 .tap.l{left:0}.tap.r{right:0}
-.vb-float{position:absolute;top:24px;left:14px;z-index:4;display:flex;align-items:center;gap:5px;border:0;border-radius:999px;background:rgba(255,255,255,.94);color:#1F6B5E;font-weight:700;font-size:.8em;padding:.45em .8em;min-height:2.4em}
+.vb-float{position:absolute;top:24px;left:14px;z-index:4;display:flex;align-items:center;gap:5px;border:0;border-radius:999px;background:rgba(255,255,255,.94);color:#1F6B5E;font-weight:700;font-size:.8em;padding:.45em .8em;min-height:44px}
 .card-more{position:absolute;top:20px;right:12px;z-index:4;width:44px;height:44px;border-radius:50%;border:0;background:rgba(20,8,14,.45);color:#fff;display:grid;place-items:center}
 .shade{position:absolute;left:0;right:0;bottom:0;height:62%;background:linear-gradient(to bottom,rgba(30,8,20,0),rgba(30,8,20,.86));z-index:1;pointer-events:none}
 .meta{position:absolute;left:18px;right:18px;bottom:16px;z-index:3;color:#fff;display:flex;flex-direction:column;gap:6px}
@@ -256,7 +260,7 @@ label.slot:hover{border-color:var(--primary)}
 .meta .intent{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:.9em}
 .meta .tags{display:flex;gap:6px;flex-wrap:wrap}
 .meta .tags span{background:rgba(255,255,255,.2);backdrop-filter:blur(4px);padding:.3em .7em;border-radius:999px;font-size:.8em;font-weight:600}
-.see{align-self:flex-start;display:inline-flex;align-items:center;gap:4px;margin-top:2px;background:#fff;color:#2A1520;border:0;border-radius:999px;font-weight:700;font-size:.85em;padding:0 .9em;min-height:2.6em}
+.see{align-self:flex-start;display:inline-flex;align-items:center;gap:4px;margin-top:2px;background:#fff;color:#2A1520;border:0;border-radius:999px;font-weight:700;font-size:.85em;padding:0 .9em;min-height:44px}
 .stamp{position:absolute;top:70px;z-index:5;font-family:var(--font-display);font-weight:800;font-size:1.6em;padding:.15em .5em;border-radius:10px;border:4px solid;opacity:0;text-transform:uppercase;letter-spacing:.04em;pointer-events:none}
 .stamp.like{left:22px;color:#fff;border-color:#fff;background:rgba(200,50,104,.85);transform:rotate(-12deg)}
 .stamp.pass{right:22px;color:#fff;border-color:#fff;background:rgba(42,21,32,.75);transform:rotate(12deg)}
@@ -315,9 +319,10 @@ button.row:hover{background:var(--surface-2)}
 .row.danger b,.row.danger .ric{color:var(--danger-text)}
 .sec-t{margin:6px 4px -6px;font-size:.78em;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--ink-2)}
 
-.switch{position:relative;width:52px;height:32px;border-radius:16px;border:0;background:var(--line-strong);flex:none;padding:0;transition:background .2s}
-.switch::after{content:"";position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
-.switch[aria-checked=true]{background:var(--trust)}
+.switch{position:relative;width:52px;height:44px;border:0;background:transparent;flex:none;padding:0}
+.switch::before{content:"";position:absolute;left:0;right:0;top:6px;height:32px;border-radius:16px;background:var(--line-strong);transition:background .2s}
+.switch::after{content:"";position:absolute;top:9px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
+.switch[aria-checked=true]::before{background:var(--trust)}
 .switch[aria-checked=true]::after{transform:translateX(20px)}
 .switch[disabled]{opacity:.6}
 
@@ -339,7 +344,7 @@ button.row:hover{background:var(--surface-2)}
 .chathead .who small{color:var(--ink-2);font-size:.8em}
 .safestrip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 16px;background:var(--surface-2);font-size:.84em;color:var(--ink-2)}
 .safestrip .ic{color:var(--primary-text)}
-.safestrip button{border:0;background:var(--surface);border-radius:999px;padding:.3em .8em;font-weight:700;font-size:.95em;display:inline-flex;gap:4px;align-items:center;min-height:2.3em}
+.safestrip button{border:0;background:var(--surface);border-radius:999px;padding:.3em .9em;font-weight:700;font-size:.95em;display:inline-flex;gap:4px;align-items:center;min-height:44px}
 .safestrip .grow{flex:1;min-width:8em}
 .msgs{flex:1;overflow-y:auto;min-height:0;padding:14px 14px 10px;display:flex;flex-direction:column;gap:8px}
 .sys{align-self:center;text-align:center;font-size:.8em;color:var(--ink-2);max-width:88%;background:var(--surface-2);padding:.6em 1em;border-radius:14px;line-height:1.45}
@@ -348,12 +353,12 @@ button.row:hover{background:var(--surface-2)}
 .b.me{background:var(--deep);color:var(--on-deep);align-self:flex-end;border-bottom-right-radius:6px}
 .b .t{font-size:.72em;opacity:.7;margin-top:3px;text-align:right;font-variant-numeric:tabular-nums}
 .b.risky{border:2px solid var(--warn-line)}
-.msg-link{background:none;border:0;padding:0;color:inherit;text-decoration:underline;font-weight:700}
+.msg-link{background:none;border:0;padding:.7em 0;margin:-.7em 0;color:inherit;text-decoration:underline;font-weight:700;display:inline-block}
 .riskcard{align-self:stretch;background:var(--warn-soft);border:1.5px solid var(--warn-line);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 .riskcard .rt{display:flex;gap:8px;align-items:flex-start;font-weight:700;color:var(--warn-text)}
 .riskcard p{margin:0;font-size:.9em;line-height:1.45}
 .riskcard .ra{display:flex;gap:8px;flex-wrap:wrap}
-.riskcard .ra button{border:0;border-radius:999px;padding:0 .9em;min-height:2.5em;font-weight:700;font-size:.86em;background:var(--surface);color:var(--ink)}
+.riskcard .ra button{border:0;border-radius:999px;padding:0 .9em;min-height:44px;font-weight:700;font-size:.86em;background:var(--surface);color:var(--ink)}
 .riskcard .ra button.go{background:var(--danger);color:var(--on-danger)}
 .typing{align-self:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:.6em .9em;font-size:.85em;color:var(--ink-2)}
 .composer{display:flex;align-items:center;gap:8px;padding:10px 12px 12px;border-top:1px solid var(--line);background:var(--surface)}
@@ -372,7 +377,7 @@ button.row:hover{background:var(--surface-2)}
 .sw-row .grow{flex:1;min-width:0}
 .sw-row b{display:block;font-size:.92em}
 .sw-row small{display:block;color:var(--ink-2);font-size:.86em;overflow-wrap:anywhere}
-.sw-b{display:inline-flex;align-items:center;gap:3px;border:1.5px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:999px;padding:0 .9em;min-height:2.5em;font-weight:700;font-size:.85em;text-decoration:none;white-space:nowrap}
+.sw-b{display:inline-flex;align-items:center;gap:3px;border:1.5px solid var(--line-strong);background:var(--surface);color:var(--ink);border-radius:999px;padding:0 .9em;min-height:44px;font-weight:700;font-size:.85em;text-decoration:none;white-space:nowrap}
 .sw-b.primary{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
 .swapc.refused{border-style:solid;border-color:var(--line-strong);background:var(--surface-2)}
 .swap-btn[disabled]{border-color:var(--line-strong);background:var(--surface-2);color:var(--ink-2);cursor:not-allowed}
@@ -381,7 +386,7 @@ button.row:hover{background:var(--surface-2)}
 .sochip.them{align-self:flex-start}
 .swapbar{display:flex;align-items:center;gap:10px;padding:8px 12px 0;background:var(--surface);border-top:1px solid var(--line)}
 .swapbar .hint{font-size:.76em;min-width:0}
-.swap-btn{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--primary);background:var(--primary-soft);color:var(--primary-text);border-radius:999px;padding:0 .9em;min-height:2.6em;font-weight:700;font-size:.85em;white-space:nowrap;flex:none}
+.swap-btn{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--primary);background:var(--primary-soft);color:var(--primary-text);border-radius:999px;padding:0 .9em;min-height:44px;font-weight:700;font-size:.85em;white-space:nowrap;flex:none}
 .swapbar+.composer{border-top:0}
 .quota-lock{padding:14px 16px 16px;border-top:1px solid var(--line);background:var(--primary-soft);display:flex;flex-direction:column;gap:8px}
 .quota-lock .ql-h{display:flex;gap:8px;align-items:center;font-weight:700;color:var(--primary-text)}
@@ -453,7 +458,7 @@ button.row:hover{background:var(--surface-2)}
 .menu button{display:flex;align-items:center;gap:12px;border:0;background:var(--surface);border-radius:14px;padding:0 14px;min-height:3.3em;font-weight:600;text-align:left}
 .menu button.danger{color:var(--danger-text)}
 .stepper{font-size:.8em;font-weight:700;color:var(--ink-2);letter-spacing:.04em}
-.checkline{display:flex;gap:12px;align-items:flex-start;background:none;border:0;text-align:left;padding:6px 0;width:100%}
+.checkline{display:flex;gap:12px;align-items:flex-start;background:none;border:0;text-align:left;padding:10px 0;width:100%;min-height:44px}
 .box-ck{width:24px;height:24px;border-radius:7px;border:2px solid var(--line-strong);flex:none;display:grid;place-items:center;color:var(--on-primary);margin-top:1px}
 .checkline[aria-checked=true] .box-ck{background:var(--primary);border-color:var(--primary)}
 .range-row{display:flex;justify-content:space-between;font-weight:600;font-variant-numeric:tabular-nums}
@@ -494,10 +499,10 @@ details.acc .tips{padding-bottom:14px}
 .con-brand b{font-family:var(--font-display);font-weight:800;font-size:20px;color:var(--title)}
 .con-brand .con-title{font-size:inherit;margin:0;color:var(--ink-2);font-weight:600;border-left:1px solid var(--line-strong);padding-left:10px}
 .con-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.con-tools select{min-height:38px;border-radius:10px;border:1.5px solid var(--line-strong);background:var(--surface);padding:0 10px}
+.con-tools select{min-height:44px;border-radius:10px;border:1.5px solid var(--line-strong);background:var(--surface);padding:0 10px}
 .con-body{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:620px}
 .con-nav{border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:4px}
-.con-nav button{display:flex;align-items:center;gap:10px;border:0;background:none;border-radius:10px;padding:10px 12px;text-align:left;font-weight:600;color:var(--ink-2)}
+.con-nav button{display:flex;align-items:center;gap:10px;border:0;background:none;border-radius:10px;padding:10px 12px;text-align:left;font-weight:600;color:var(--ink-2);min-height:44px}
 .con-nav button[aria-current=page]{background:var(--primary-soft);color:var(--primary-text)}
 .con-nav .cnt{margin-left:auto;background:var(--primary);color:var(--on-primary);border-radius:999px;font-size:12px;padding:1px 8px;font-variant-numeric:tabular-nums}
 .con-main{padding:20px 22px;min-width:0;overflow:auto;display:flex;flex-direction:column;gap:18px}
@@ -525,7 +530,7 @@ details.acc .tips{padding-bottom:14px}
 .scorebar i{display:block;width:56px;height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden}
 .scorebar i b{display:block;height:100%;background:var(--primary)}
 .filters{display:flex;gap:8px;flex-wrap:wrap}
-.filters button{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-weight:600;font-size:13px}
+.filters button{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;font-weight:600;font-size:13px;min-height:44px}
 .filters button[aria-pressed=true]{border-color:var(--primary);background:var(--primary-soft);color:var(--primary-text)}
 .case-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .cbox{border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;background:var(--app);min-width:0}
@@ -544,7 +549,7 @@ details.acc .tips{padding-bottom:14px}
 .audit li{display:grid;grid-template-columns:130px 1fr;gap:12px;padding:10px 0;border-top:1px solid var(--line);font-size:13.5px}
 .audit{list-style:none;margin:0;padding:0}
 .audit time{color:var(--ink-2);font-variant-numeric:tabular-nums}
-.backlink{align-self:flex-start;border:0;background:none;color:var(--primary-text);font-weight:700;display:flex;align-items:center;gap:4px;padding:4px 0}
+.backlink{align-self:flex-start;border:0;background:none;color:var(--primary-text);font-weight:700;display:flex;align-items:center;gap:4px;padding:4px 0;min-height:44px}
 .done{background:var(--trust-soft);color:var(--trust-text);border-radius:12px;padding:12px;font-weight:600}
 
 @media (max-width: 880px){
@@ -552,6 +557,11 @@ details.acc .tips{padding-bottom:14px}
   .panel{position:static;max-height:none;order:2}
   .stage{order:1}
   .phone{width:100%;max-width:440px;height:calc(100dvh - 24px);min-height:560px;border-width:0;border-radius:26px;box-shadow:none;border:1px solid var(--line)}
+}
+/* Écrans très bas (écran extérieur des téléphones pliables, paysage) : l'application occupe toute la hauteur disponible. */
+@media (max-width: 880px) and (max-height: 600px){
+  .phone{min-height:0;height:calc(100dvh - 12px)}
+  .page{padding-block:6px}
   .con-body{grid-template-columns:1fr}
   .con-nav{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line)}
   .con-nav button{white-space:nowrap}
@@ -667,7 +677,24 @@ function portrait(L,scene=0,label=''){
 /* ---------------- Données de démonstration (fictives) ---------------- */
 const INTERESTS=['Randonnée','Cuisine','Cinéma','Musique live','Lecture','Voyages','Jardinage','Danse','Photographie','Jeux de société','Yoga','Théâtre','Vélo','Bénévolat','Musées','Natation','Football','Pâtisserie','Brocantes','Podcasts'];
 const INTENTIONS=['Une relation sérieuse','Une relation, sans pression','De nouvelles amitiés','Je ne sais pas encore'];
-const CITIES=['Lyon 1er','Lyon 2e','Lyon 3e','Lyon 4e','Lyon 5e','Lyon 6e','Lyon 7e','Lyon 8e','Lyon 9e','Villeurbanne','Caluire-et-Cuire','Écully','Vénissieux','Bron','Oullins'];
+/* Pays pris en charge : code, nom, indicatif, unité de distance, exemple de numéro */
+const COUNTRIES=[['FR','France','+33','km','06 12 34 56 78'],['BE','Belgique','+32','km','0470 12 34 56'],['CH','Suisse','+41','km','078 123 45 67'],['CA','Canada','+1','km','(514) 555-0123'],['US','États-Unis','+1','mi','(415) 555-0123'],['GB','Royaume-Uni','+44','mi','07700 900123'],['DE','Allemagne','+49','km','0151 23456789'],['ES','Espagne','+34','km','612 345 678'],['IT','Italie','+39','km','312 345 6789']];
+const CITY_BY_COUNTRY={
+ FR:['Paris','Marseille','Lyon','Toulouse','Nice','Nantes','Montpellier','Strasbourg','Bordeaux','Lille','Rennes','Reims','Toulon','Saint-Étienne','Le Havre','Grenoble','Dijon','Angers','Nîmes','Clermont-Ferrand','Aix-en-Provence','Brest','Tours','Limoges','Amiens','Lyon 1er','Lyon 2e','Lyon 3e','Lyon 4e','Lyon 5e','Lyon 6e','Lyon 7e','Lyon 8e','Lyon 9e','Villeurbanne','Caluire-et-Cuire','Écully','Vénissieux','Bron','Oullins','Pointe-à-Pitre','Fort-de-France','Saint-Denis (La Réunion)','Cayenne'],
+ US:['New York','Los Angeles','Chicago','Houston','Phoenix','Philadelphia','San Antonio','San Diego','Dallas','Austin','San Jose','San Francisco','Seattle','Denver','Washington','Boston','Nashville','Las Vegas','Portland','Atlanta','Miami','Minneapolis','New Orleans','Detroit','Salt Lake City','Brooklyn','Queens','Honolulu','Anchorage'],
+ BE:['Bruxelles','Anvers','Gand','Liège','Charleroi','Namur'],CH:['Genève','Lausanne','Zurich','Berne','Bâle','Neuchâtel'],CA:['Montréal','Québec','Toronto','Vancouver','Ottawa','Calgary'],
+ GB:['Londres','Manchester','Birmingham','Édimbourg','Glasgow','Bristol'],DE:['Berlin','Munich','Hambourg','Cologne','Francfort','Stuttgart'],ES:['Madrid','Barcelone','Valence','Séville','Malaga','Bilbao'],IT:['Rome','Milan','Naples','Turin','Florence','Bologne']};
+const fold=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+const ctry=c=>COUNTRIES.find(x=>x[0]===c)||COUNTRIES[0];
+const myUnit=()=>ctry(S.me.country)[3];
+const distLabel=km=>{const mi=myUnit()==='mi';const v=Math.max(1,Math.round(mi?km*0.621371:km));return `à environ ${v} ${mi?(v>1?'miles':'mile'):'km'}`};
+const distOut=km=>myUnit()==='mi'?`${Math.max(1,Math.round(km*0.621371))} miles`:`${km} km`;
+/* Numéros d'urgence selon le pays de la personne */
+const EMERGENCY={FR:['17','112','3919'],BE:['101','112','0800 30 030'],CH:['117','112','143'],CA:['911','911','1-800-363-9010'],US:['911','911','1-800-799-7233'],GB:['999','112','0808 2000 247'],DE:['110','112','116 016'],ES:['091','112','016'],IT:['113','112','1522']};
+function emergencyText(){const [police,urg,help]=EMERGENCY[S.me.country]||EMERGENCY.FR;return `Appelez la police au <span class="num">${police}</span>${urg!==police?` ou les urgences au <span class="num">${urg}</span>`:''}. Victime ou témoin de violences : <span class="num">${help}</span>, gratuit et confidentiel.`}
+function citySuggest(q){const list=CITY_BY_COUNTRY[S.me.country]||[];const k=fold(q).trim();if(!k)return list.slice(0,6);return [...list.filter(c=>fold(c).startsWith(k)),...list.filter(c=>!fold(c).startsWith(k)&&fold(c).includes(k))].slice(0,6)}
+function validPhone(v,c){const x=v.replace(/[\s.\-()]/g,'').replace(/^00/,'+');if(x.startsWith('+33'))return /^\+33[67]\d{8}$/.test(x);if(x.startsWith('+1'))return /^\+1[2-9]\d{2}[2-9]\d{6}$/.test(x);if(x.startsWith('+'))return /^\+[1-9]\d{7,14}$/.test(x);
+ return ({FR:/^0[67]\d{8}$/,BE:/^04\d{8}$/,CH:/^07[5-9]\d{7}$/,GB:/^07\d{9}$/,DE:/^01[5-7]\d{8,9}$/,ES:/^[67]\d{8}$/,IT:/^3\d{8,9}$/,US:/^1?[2-9]\d{2}[2-9]\d{6}$/,CA:/^1?[2-9]\d{2}[2-9]\d{6}$/}[c]||/^$/).test(x)}
 const PEOPLE=[
  {id:'camille',prenom:'Camille',age:29,ville:'Lyon 7e',dist:3,intention:'Une relation sérieuse',interests:['Randonnée','Cuisine','Photographie'],bio:'Infirmière de nuit, randonneuse de jour. Je cherche quelqu’un avec qui partager un vrai café après une garde.',prompt:['Mon dimanche idéal','Le marché du quai, puis une sieste assumée.'],likesYou:true,vdate:'3 oct. 2026',look:{skin:'#E8B796',hair:'#3B2219',style:'long',bg:['#F5C6A9','#EFA3B9'],shirt:'#318779',earrings:true}},
  {id:'karim',prenom:'Karim',age:34,ville:'Villeurbanne',dist:6,intention:'Une relation sérieuse',interests:['Jeux de société','Pâtisserie','Football'],bio:'Prof de maths qui rate encore ses macarons. Je vous laisse gagner aux jeux de société (pas vraiment).',prompt:['On s’entendra bien si…','vous aimez les discussions qui partent dans tous les sens.'],likesYou:false,vdate:'28 sept. 2026',look:{skin:'#B57A55',hair:'#1E1512',style:'short',bg:['#C9E4DC','#F5C6A9'],shirt:'#54243F',beard:true}},
@@ -744,7 +771,7 @@ const RUDE=/\b(connard|connasse|salope|pute|pétasse|enfoiré|grosse vache|sale 
 let S;
 function initState(){return{
  mode:'app',screen:'splash',stack:[],tab:'decouvrir',sheet:null,match:null,err:{},tmp:{},
- me:{prenom:'',contact:'',contactType:'tel',dob:'',age:null,genre:'',genreLibre:'',pronoms:'',cherche:[],orientation:'',showOrientation:false,ville:'',photos:[],bio:'',intention:'',interests:[],socials:{}},
+ me:{prenom:'',country:'FR',contact:'',contactType:'tel',dob:'',age:null,genre:'',genreLibre:'',pronoms:'',cherche:[],orientation:'',showOrientation:false,ville:'',photos:[],bio:'',intention:'',interests:[],socials:{}},
  verif:{id:'todo',video:'todo',idAttempts:0,videoAttempts:0,idDate:null,videoDate:null},
  rulesAccepted:false,editing:false,
  seen:[],last:null,photoIdx:{},view:null,chatId:null,setKey:null,
@@ -828,8 +855,9 @@ SCR.how=()=>`<div class="screen">${topbar()}<div class="scroll">
 SCR.auth=()=>{const t=S.me.contactType==='tel';return `<div class="screen">${topbar()}<div class="scroll">
   <h1 class="h1">Créons votre compte</h1>
   <div class="seg" role="group" aria-label="Moyen de connexion"><button aria-pressed="${t}" data-a="ctype" data-v="tel">Téléphone</button><button aria-pressed="${!t}" data-a="ctype" data-v="mail">E-mail</button></div>
+  ${t?`<div class="field"><label for="f-country">Pays</label><select id="f-country" data-bind="me.country">${COUNTRIES.map(c=>`<option value="${c[0]}" ${S.me.country===c[0]?'selected':''}>${c[1]} (${c[2]})</option>`).join('')}</select></div>`:''}
   <div class="field"><label for="f-contact">${t?'Numéro de mobile':'Adresse e-mail'}</label>
-  <input class="input ${S.err.contact?'bad':''}" id="f-contact" type="${t?'tel':'email'}" inputmode="${t?'tel':'email'}" autocomplete="${t?'tel':'email'}" placeholder="${t?'06 12 34 56 78':'prenom@exemple.fr'}" value="${esc(S.me.contact)}" data-bind="me.contact" ${S.err.contact?'aria-describedby="err-contact" aria-invalid="true"':''}>
+  <input class="input ${S.err.contact?'bad':''}" id="f-contact" type="${t?'tel':'email'}" inputmode="${t?'tel':'email'}" autocomplete="${t?'tel':'email'}" placeholder="${t?ctry(S.me.country)[4]:'prenom@exemple.fr'}" value="${esc(S.me.contact)}" data-bind="me.contact" ${S.err.contact?'aria-describedby="err-contact" aria-invalid="true"':''}>
   ${errL('contact')}<p class="hint">Nous vous envoyons un code à usage unique. ${t?'Votre numéro':'Votre adresse'} n’est jamais affiché${t?'':'e'} sur votre profil.</p></div>
   </div>${bottom(`<button class="btn primary" data-a="sendCode">Recevoir mon code</button>`)}</div>`};
 SCR.otp=()=>{const c=S.me.contact.trim();const m=S.me.contactType==='tel'?'•• •• •• •• '+c.replace(/\s/g,'').slice(-2):c.replace(/^(.).*(@.*)$/,'$1•••$2');return `<div class="screen">${topbar()}<div class="scroll">
@@ -854,14 +882,15 @@ SCR.basics=()=>`<div class="screen">${topbar()}${progress(2)}<div class="scroll"
   <div class="field"><span class="flabel">Je souhaite rencontrer</span>${chipsSel(['Des femmes','Des hommes','Des personnes non binaires'],'me.cherche',true)}${errL('cherche')}</div>
   <div class="field"><label for="f-ori">Orientation <span class="hint">(facultatif)</span></label><select id="f-ori" data-bind="me.orientation"><option value="">Je préfère ne pas le dire</option>${['Hétérosexuelle','Homosexuelle','Bisexuelle','Pansexuelle','Asexuelle','En questionnement'].map(o=>`<option ${S.me.orientation===o?'selected':''}>${o}</option>`).join('')}</select><p class="hint">Jamais affichée sans votre accord. Vous pourrez la montrer ou la masquer dans Confidentialité.</p></div>
   </div>${bottom(`<button class="btn primary" data-a="saveBasics">Continuer</button>`)}</div>`;
-SCR.location=()=>{const q=(S.tmp.city||'').toLowerCase();const sug=S.tmp.cityInput?CITIES.filter(c=>!q||c.toLowerCase().includes(q)).slice(0,5):[];return `<div class="screen">${topbar()}${progress(3)}<div class="scroll">
+SCR.location=()=>{const sug=S.tmp.cityInput?citySuggest(S.tmp.city):[];return `<div class="screen">${topbar()}${S.editing?'':progress(3)}<div class="scroll">
   <div class="ill rose">${ic('pin',38)}</div>
   <h1 class="h1">Où souhaitez-vous faire des rencontres ?</h1>
-  <p class="lead">Nous utilisons votre position pour vous proposer des personnes proches. Les autres voient seulement une distance arrondie, comme « à environ 5 km », jamais votre adresse.</p>
-  ${S.me.ville?`<div class="vcard">${ic('checkc',24)}<div class="grow"><b>${esc(S.me.ville)}</b><small>Position approximative, arrondie au kilomètre</small></div><button class="btn link" style="width:auto" data-a="clearCity">Modifier</button></div>`:`
+  <p class="lead">Nous utilisons votre position pour vous proposer des personnes proches. Les autres voient seulement une distance arrondie, comme « ${distLabel(8)} », jamais votre adresse.</p>
+  <div class="field"><label for="f-loc-country">Pays</label><select id="f-loc-country" data-bind="me.country" data-live="country">${COUNTRIES.map(c=>`<option value="${c[0]}" ${S.me.country===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select></div>
+  ${S.me.ville?`<div class="vcard">${ic('checkc',24)}<div class="grow"><b>${esc(S.me.ville)}, ${esc(ctry(S.me.country)[1])}</b><small>Position approximative, arrondie</small></div><button class="btn link" style="width:auto" data-a="clearCity">Modifier</button></div>`:`
   <button class="btn deep" data-a="useLoc">${ic('pin',20)} Utiliser ma position</button>
   <button class="btn ghost" data-a="cityInput">Saisir ma ville</button>
-  ${S.tmp.cityInput?`<div class="field"><label for="f-city">Ville ou arrondissement</label><input class="input" id="f-city" autocomplete="off" placeholder="Ex. Lyon 3e" value="${esc(S.tmp.city||'')}" data-bind="tmp.city" data-live="city"><div class="list" id="city-sug">${sug.map(c=>`<button class="row" data-a="setCity" data-v="${esc(c)}">${ic('pin',18)}<span class="grow"><b>${esc(c)}</b></span></button>`).join('')}</div></div>`:''}`}
+  ${S.tmp.cityInput?`<div class="field"><label for="f-city">Ville ou arrondissement</label><input class="input" id="f-city" autocomplete="off" placeholder="Ex. ${esc((CITY_BY_COUNTRY[S.me.country]||['Paris'])[0])}" value="${esc(S.tmp.city||'')}" data-bind="tmp.city" data-live="city"><div class="list" id="city-sug">${sug.map(c=>`<button class="row" data-a="setCity" data-v="${esc(c)}">${ic('pin',18)}<span class="grow"><b>${esc(c)}</b></span></button>`).join('')}</div></div>`:''}`}
   ${errL('ville')}</div>${bottom(`<button class="btn primary" data-a="saveLoc">Continuer</button>`)}</div>`};
 SCR.photos=()=>{const ph=S.me.photos;const slots=[];for(let i=0;i<6;i++){const p=ph[i];slots.push(p?`<div class="slot filled">${photoHTML(p,'Votre photo '+(i+1))}${i>0?`<button class="mk" data-a="photoMain" data-i="${i}" aria-label="Utiliser la photo ${i+1} comme photo principale"></button>`:''}${i===0?'<span class="main">Principale</span>':''}<button class="rm" data-a="photoRm" data-i="${i}" aria-label="Retirer la photo ${i+1}">${ic('x',16)}</button></div>`:i===ph.length?`<label class="slot" for="file-photo">${ic('plus',26)}<span>Ajouter</span></label>`:`<div class="slot" aria-hidden="true"></div>`)}
  return `<div class="screen">${topbar()}${S.editing?'':progress(4)}<div class="scroll">
@@ -942,7 +971,7 @@ SCR.verified=()=>`<div class="screen">${topbar({back:false})}<div class="scroll"
   </div>${bottom(`<button class="btn primary" data-a="finish" ${S.rulesAccepted?'':'disabled'}>Découvrir les profils</button>`)}</div>`;
 
 /* ---------------- Application : onglets ---------------- */
-function deckList(){const f=S.filters;return PEOPLE.filter(p=>!S.seen.includes(p.id)&&!S.blocked.includes(p.id)&&!S.matches.includes(p.id)&&p.age>=f.ageMin&&p.age<=f.ageMax&&p.dist<=f.dist&&(f.intention==='Toutes'||p.intention===f.intention)&&(!f.interest||p.interests.includes(f.interest)))}
+function deckList(){const f=S.filters;return PEOPLE.filter(p=>(p.country||'FR')===(S.me.country||'FR')&&!S.seen.includes(p.id)&&!S.blocked.includes(p.id)&&!S.matches.includes(p.id)&&p.age>=f.ageMin&&p.age<=f.ageMax&&p.dist<=f.dist&&(f.intention==='Toutes'||p.intention===f.intention)&&(!f.interest||p.interests.includes(f.interest)))}
 function lockedView(what){return `<div class="locked"><div class="ill warn">${ic('lock',36)}</div><h2 class="h2">Terminez vos vérifications pour ${what}</h2><p class="lead">Pour la sécurité de tout le monde, seuls les membres vérifiés peuvent découvrir des profils, aimer et écrire. En attendant, votre profil reste invisible.</p>${verifCards()}${nextVerifBtn().replace('btn primary','btn primary')}<button class="btn link" data-a="tab" data-t="profil">Compléter mon profil en attendant</button></div>`}
 function cardHTML(p,top){const idx=top?(S.photoIdx[p.id]||0):0;const ph=photosOf(p);return `<article class="card ${top?'top':'behind'}" data-id="${p.id}" aria-label="${esc(p.prenom)}, ${p.age} ans" ${top?'':'aria-hidden="true"'}>
   <div class="photo">${photoHTML(ph[idx],top?`Photo ${idx+1} sur ${ph.length} de ${p.prenom}`:'')}</div>
@@ -950,7 +979,7 @@ function cardHTML(p,top){const idx=top?(S.photoIdx[p.id]||0):0;const ph=photosOf
   <button class="vb-float" data-a="sheet" data-k="badge">${ic('shieldcheck',16)} Profil vérifié</button><button class="card-more" data-a="sheet" data-k="cardMenu" data-id="${p.id}" aria-label="Plus d’options pour ${esc(p.prenom)} : signaler, bloquer">${ic('more')}</button>`:''}
   <div class="shade"></div>
   <div class="meta"><div class="name">${esc(p.prenom)}, ${p.age}${p.pronoms?` <span class="pron">${esc(p.pronoms)}</span>`:''}</div>
-   <div class="sub">${ic('pin',16)} ${esc(p.ville)} · à environ ${p.dist} km</div>
+   <div class="sub">${ic('pin',16)} ${esc(p.ville)} · ${distLabel(p.dist)}</div>
    <div class="intent">${ic('heart',15)} ${esc(p.intention)}</div>
    <div class="tags">${p.interests.map(i=>`<span>${esc(i)}</span>`).join('')}</div>
    ${top?`<button class="see" data-a="openProfile" data-id="${p.id}" data-ctx="deck">Voir le profil ${ic('chev',16)}</button>`:''}</div>
@@ -959,6 +988,7 @@ function discover(){
  if(!isVerified())return lockedView('découvrir des profils');
  if(S.settings.paused)return `<div class="locked"><div class="ill">${ic('pause',36)}</div><h2 class="h2">Votre profil est en pause</h2><p class="lead">Personne ne vous voit dans Découvrir. Vos conversations restent ouvertes.</p><button class="btn primary" data-a="toggle" data-k="settings.paused">Réactiver mon profil</button></div>`;
  const d=deckList();
+ if(!d.length&&(S.me.country||'FR')!=='FR')return `<div class="locked"><div class="ill rose">${ic('pin',36)}</div><h2 class="h2">Pas encore de membres près de ${esc(S.me.ville||ctry(S.me.country)[1])}</h2><p class="lead">Liane ouvre d’abord en France. Votre profil est prêt : nous vous prévenons dès que des membres vérifiés s’inscrivent près de chez vous (${esc(ctry(S.me.country)[1])}).</p><p class="hint">Prototype : les profils de démonstration se trouvent en France.</p><button class="btn ghost" data-a="editGo" data-s="location">Changer de ville</button></div>`;
  if(!d.length)return `<div class="locked"><div class="ill rose">${ic('spark',36)}</div><h2 class="h2">Vous avez vu tous les profils pour le moment</h2><p class="lead">Nous ne montrons que des personnes vérifiées qui correspondent à vos filtres. De nouveaux membres terminent leur inscription chaque jour : revenez demain.</p><button class="btn primary" data-a="sheet" data-k="filters">Élargir mes filtres</button>${S.seen.some(id=>!S.matches.includes(id))?`<button class="btn ghost" data-a="replay">Revoir les profils passés</button>`:''}</div>`;
  const left=Math.max(0,S.quota.likes-S.likesUsed);
  return `<div class="deckwrap"><div class="deck">${d[1]?cardHTML(d[1],false):''}${cardHTML(d[0],true)}</div>
@@ -1014,7 +1044,7 @@ SCR.profile=()=>{const v=S.view;const self=v.id==='me';const p=self?{prenom:S.me
   <button class="ovb l" data-a="back" aria-label="Retour">${ic('back')}</button>${self?'':`<button class="ovb r" data-a="sheet" data-k="cardMenu" data-id="${v.id}" data-from="profile" aria-label="Plus d’options : signaler, bloquer">${ic('more')}</button>`}</div>
  <div class="pv-body">
   <div><div class="pv-name"><h1 class="h1">${esc(p.prenom)}${p.age?', '+p.age:''}</h1>${isVerified()||!self?vicon(24):''}${p.pronoms?`<span class="chip">${esc(p.pronoms)}</span>`:''}</div></div>
-  <div class="pv-sub">${ic('pin',16)} ${esc(p.ville)}${self?'':` · à environ ${p.dist} km`}</div>
+  <div class="pv-sub">${ic('pin',16)} ${esc(p.ville)}, ${esc(ctry(self?S.me.country:(p.country||'FR'))[1])}${self?'':` · ${distLabel(p.dist)}`}</div>
   <div class="box"><span class="lbl">Je recherche</span><span class="big">${ic('heart',20)} ${esc(p.intention)}</span></div>
   ${p.bio?`<div class="box"><span class="lbl">À propos</span><p>${esc(p.bio)}</p></div>`:''}
   ${p.prompt?`<div class="box"><span class="lbl">${esc(p.prompt[0])}</span><p style="font-family:var(--font-display);font-size:1.15em;font-weight:600">${esc(p.prompt[1])}</p></div>`:''}
@@ -1049,7 +1079,7 @@ SCR.chat=()=>{const id=S.chatId,p=P(id),c=S.convos[id]||[];const closed=S.closed
 
 /* ---------------- Réglages, sécurité, compte ---------------- */
 SCR.settings=()=>{const k=S.setKey;const T={disc:'Préférences de découverte',privacy:'Confidentialité',notifs:'Notifications',a11y:'Accessibilité',sub:'Abonnement Premium'};let b='';
- if(k==='disc'){const f=S.filters;b=`<div class="box"><div class="range-row"><label for="r-dist">Distance maximale</label><span id="o-dist">${f.dist} km</span></div><input type="range" id="r-dist" min="1" max="100" value="${f.dist}" data-bind="filters.dist" data-out="o-dist" data-fmt="km"></div>
+ if(k==='disc'){const f=S.filters;b=`<div class="list"><button class="row" data-a="editGo" data-s="location"><span class="ric">${ic('pin',20)}</span><span class="grow"><b>Ma ville</b><small>${esc(S.me.ville||'À choisir')}, ${esc(ctry(S.me.country)[1])}</small></span>${ic('chev',18).replace('class="ic"','class="ic chev"')}</button></div><div class="box"><div class="range-row"><label for="r-dist">Distance maximale</label><span id="o-dist">${distOut(f.dist)}</span></div><input type="range" id="r-dist" min="1" max="100" value="${f.dist}" data-bind="filters.dist" data-out="o-dist" data-fmt="km"></div>
   <div class="box"><span class="lbl">Tranche d’âge</span><div class="two"><div class="field"><label for="n-amin">De</label><input class="input" type="number" id="n-amin" min="18" max="99" value="${f.ageMin}" data-bind="filters.ageMin"></div><div class="field"><label for="n-amax">À</label><input class="input" type="number" id="n-amax" min="18" max="99" value="${f.ageMax}" data-bind="filters.ageMax"></div></div><p class="hint">Les personnes de moins de 18 ans ne peuvent pas s’inscrire.</p></div>
   <div class="list">${sw('settings.paused','Mettre mon profil en pause','Vous n’apparaissez plus dans Découvrir. Vos conversations restent ouvertes.')}</div>`}
  if(k==='privacy')b=`<div class="list">${sw('settings.showDist','Afficher ma distance','Toujours arrondie au kilomètre. Votre position exacte n’est jamais partagée.')}${sw('settings.online','Indiquer quand je suis en ligne','')}${sw('settings.readReceipts','Accusés de lecture','Si vous les désactivez, vous ne voyez pas non plus ceux des autres.')}${sw('settings.showOrientation','Afficher mon orientation','Désactivé par défaut.')}</div>
@@ -1067,14 +1097,14 @@ SCR.settings=()=>{const k=S.setKey;const T={disc:'Préférences de découverte',
   ${S.premium?`<button class="btn ghost" data-a="cancelSub">Résilier l’abonnement</button>`:`<button class="btn primary" data-a="paywall" data-r="sub">Voir les offres</button>`}<button class="btn link" data-a="toast" data-m="Aucun achat à restaurer sur ce compte.">Restaurer un achat</button>`;
  return `<div class="screen">${topbar({title:T[k]})}<div class="scroll" data-sk="set-${k}">${b}</div></div>`};
 SCR.safety=()=>`<div class="screen">${topbar({title:'Aide et sécurité'})}<div class="scroll" data-sk="safety">
- <div class="urgent" role="note"><b>${ic('warn',18)} En danger immédiat ?</b><p>Appelez la police au <span class="num">17</span> ou les urgences au <span class="num">112</span>. Victime ou témoin de violences : <span class="num">3919</span>, gratuit et anonyme.</p><p class="hint">Liane n’est pas un service d’urgence. Notre équipe traite les signalements par ordre de gravité.</p></div>
+ <div class="urgent" role="note"><b>${ic('warn',18)} En danger immédiat ?</b><p>${emergencyText()}</p><p class="hint">Liane n’est pas un service d’urgence. Notre équipe traite les signalements par ordre de gravité.</p></div>
  <details class="acc" open><summary>Avant un premier rendez-vous ${ic('chev',18)}</summary><ul class="tips"><li>Retrouvez-vous dans un lieu public et fréquenté.</li><li>Prévenez un proche : où, quand, avec qui.</li><li>Gardez votre propre moyen de transport pour rentrer.</li><li>Vous pouvez partir à tout moment, sans vous justifier.</li></ul></details>
  <details class="acc"><summary>Reconnaître une arnaque ${ic('chev',18)}</summary><ul class="tips"><li>Une demande d’argent, de carte cadeau ou de crypto, même petite et même « urgente ».</li><li>Une demande de code reçu par SMS : ne le donnez jamais.</li><li>L’envie pressante de continuer sur une autre messagerie.</li><li>Un lien de « vérification » ou de paiement envoyé dans la conversation.</li></ul></details>
  <h2 class="sec-t">Mes signalements</h2>
  <div class="list">${S.reports.length?S.reports.map(r=>`<div class="row"><span class="ric">${ic('flag',18)}</span><span class="grow"><b>${esc(P(r.id).prenom)} · ${esc(r.reason)}</b><small>Réf. ${r.ref} · ${esc(r.date)}</small></span><span class="status wait">${esc(r.status)}</span></div>`).join(''):`<p class="hint" style="padding:14px 16px">Aucun signalement envoyé. Vous pouvez signaler un profil depuis sa carte, son profil ou la conversation.</p>`}</div>
  <h2 class="sec-t">Personnes bloquées</h2>
  <div class="list">${S.blocked.length?S.blocked.map(id=>`<div class="row">${avatar(P(id),40)}<span class="grow"><b>${esc(P(id).prenom)}</b><small>Ne peut plus vous voir ni vous écrire</small></span><button class="btn ghost sm" data-a="unblock" data-id="${id}">Débloquer</button></div>`).join(''):`<p class="hint" style="padding:14px 16px">Personne n’est bloqué.</p>`}</div>
- <div class="list"><button class="row" data-a="toast" data-m="Formulaire de recours : réponse motivée sous 7 jours (délai à valider)."><span class="ric">${ic('help',20)}</span><span class="grow"><b>Contester une décision</b><small>Si votre compte ou un contenu a été restreint</small></span></button><button class="row" data-a="toast" data-m="Règles de la communauté : à finaliser avec l’équipe juridique."><span class="ric">${ic('doc',20)}</span><span class="grow"><b>Règles de la communauté</b><small>Ce qui est accepté, ce qui ne l’est pas</small></span></button></div>
+ <div class="list"><button class="row" data-a="toast" data-m="Formulaire de contact : adresse e-mail de l’équipe à définir avant publication."><span class="ric">${ic('mail',20)}</span><span class="grow"><b>Nous contacter</b><small>Une question, un problème : l’équipe vous répond</small></span></button><button class="row" data-a="toast" data-m="Formulaire de recours : réponse motivée sous 7 jours (délai à valider)."><span class="ric">${ic('help',20)}</span><span class="grow"><b>Contester une décision</b><small>Si votre compte ou un contenu a été restreint</small></span></button><button class="row" data-a="toast" data-m="Règles de la communauté : à finaliser avec l’équipe juridique."><span class="ric">${ic('doc',20)}</span><span class="grow"><b>Règles de la communauté</b><small>Ce qui est accepté, ce qui ne l’est pas</small></span></button></div>
  </div></div>`;
 SCR.verifcenter=()=>`<div class="screen">${topbar({title:'Centre de vérification'})}<div class="scroll">
  ${verifCards()}
@@ -1103,7 +1133,7 @@ const SH={};
 const shHead=(t,sub)=>`<div class="sheet-h"><h2 class="h2" id="sh-t">${t}</h2><button class="icon-btn" data-a="close" aria-label="Fermer">${ic('x')}</button></div>${sub?`<p class="lead" style="margin-top:-6px">${sub}</p>`:''}`;
 SH.badge=()=>`${shHead('Que veut dire « Profil vérifié » ?')}<ul class="checks"><li>${ic('check',20)}<span>La <b>pièce d’identité</b> a été contrôlée par un prestataire spécialisé, et la personne a 18 ans ou plus.</span></li><li>${ic('check',20)}<span>Une <b>vidéo de présence</b> a confirmé qu’une personne réelle, correspondant aux photos, a créé le compte.</span></li></ul><ul class="checks no"><li>${ic('x',20)}<span>Cela <b>ne garantit pas</b> les intentions ni le comportement de la personne. Restez attentif ou attentive et signalez ce qui vous semble anormal.</span></li></ul><button class="btn primary" data-a="close">J’ai compris</button>`;
 SH.filters=()=>{const f=S.filters;return `${shHead('Filtres')}
- <div class="box"><div class="range-row"><label for="r-fdist">Distance maximale</label><span id="o-fdist">${f.dist} km</span></div><input type="range" id="r-fdist" min="1" max="100" value="${f.dist}" data-bind="filters.dist" data-out="o-fdist" data-fmt="km"></div>
+ <div class="box"><div class="range-row"><label for="r-fdist">Distance maximale</label><span id="o-fdist">${distOut(f.dist)}</span></div><input type="range" id="r-fdist" min="1" max="100" value="${f.dist}" data-bind="filters.dist" data-out="o-fdist" data-fmt="km"></div>
  <div class="box"><span class="lbl">Âge</span><div class="two"><div class="field"><label for="f-amin">De</label><input class="input" type="number" id="f-amin" min="18" max="99" value="${f.ageMin}" data-bind="filters.ageMin"></div><div class="field"><label for="f-amax">À</label><input class="input" type="number" id="f-amax" min="18" max="99" value="${f.ageMax}" data-bind="filters.ageMax"></div></div></div>
  <div class="field"><span class="flabel">Recherche</span>${chipsSel(['Toutes',...INTENTIONS],'filters.intention',false)}</div>
  <div class="field"><label for="f-int">Un centre d’intérêt en commun</label><select id="f-int" data-bind="filters.interest"><option value="">Peu importe</option>${INTERESTS.map(i=>`<option ${f.interest===i?'selected':''}>${i}</option>`).join('')}</select></div>
@@ -1120,7 +1150,7 @@ SH.report=()=>{const r=S.report,p=P(r.id);
   ${S.blocked.includes(r.id)?'':`<button class="checkline" role="checkbox" aria-checked="${r.block}" data-a="toggle" data-k="report.block"><span class="box-ck">${r.block?ic('check',16):''}</span><span>Bloquer aussi ${esc(p.prenom)}</span></button>`}
   <div class="note">${ic('lock')}<div><b>Votre signalement est confidentiel</b><p>${esc(p.prenom)} ne saura pas que vous l’avez signalé.</p></div></div>
   <div class="two"><button class="btn ghost" data-a="repBack">Retour</button><button class="btn primary" data-a="repSend">Envoyer</button></div>`;
- return `<div class="ill">${ic('checkc',40)}</div><h2 class="h2 center" id="sh-t">Signalement envoyé</h2><p class="lead center">Référence ${r.ref}. Notre équipe le traite selon sa gravité et vous préviendra de la décision. ${r.block?esc(p.prenom)+' est bloqué et ne peut plus vous contacter.':''}</p><div class="urgent"><p>En danger immédiat, appelez le <span class="num">17</span> ou le <span class="num">112</span>.</p></div><button class="btn primary" data-a="repDone">Terminer</button>`};
+ return `<div class="ill">${ic('checkc',40)}</div><h2 class="h2 center" id="sh-t">Signalement envoyé</h2><p class="lead center">Référence ${r.ref}. Notre équipe le traite selon sa gravité et vous préviendra de la décision. ${r.block?esc(p.prenom)+' est bloqué et ne peut plus vous contacter.':''}</p><div class="urgent"><p>En danger immédiat, appelez le <span class="num">${(EMERGENCY[S.me.country]||EMERGENCY.FR)[0]}</span>.</p></div><button class="btn primary" data-a="repDone">Terminer</button>`};
 SCR.paywall=()=>{const r=S.paywallReason||'sub';const T={
   msgs:['Vous avez utilisé vos '+S.quota.msgs+' messages gratuits','Vos messages gratuits sont terminés. Pour continuer vos conversations, prenez l’abonnement Premium.','chat'],
   likes:['Vous avez utilisé vos '+S.quota.likes+' J’aime gratuits','Vos J’aime gratuits sont terminés. Pour continuer à aimer des profils, prenez l’abonnement Premium.','heart'],
@@ -1132,7 +1162,8 @@ SCR.paywall=()=>{const r=S.paywallReason||'sub';const T={
   <div class="pw-hero"><span class="pw-ic">${ic(T[2],34)}</span><h1 class="h1">${T[0]}</h1><p class="lead">${T[1]}</p></div>
   <ul class="perks"><li>${ic('chat',20)}Messages illimités</li><li>${ic('heart',20)}J’aime illimités</li><li>${ic('eye',20)}Voir qui vous a aimé</li><li>${ic('undo',20)}Revenir sur un profil passé</li><li>${ic('sliders',20)}Filtres supplémentaires</li></ul>
   <div class="opts" role="radiogroup" aria-label="Durée de l’abonnement">${plans.map(p=>`<button class="opt" role="radio" aria-checked="${S.plan===p[0]}" data-a="plan" data-v="${p[0]}"><span class="radio"></span><span class="grow">${p[1]}<small>${p[3]}</small></span><span class="price">${p[2]}</span></button>`).join('')}</div>
-  <p class="hint">Renouvellement automatique au même prix. Résiliable à tout moment, au plus tard 24 h avant l’échéance. Toujours gratuit pour tous : vérifications, signalement, blocage, aide.</p>
+  <p class="hint">Abonnement Premium · ${cur[1]} · ${cur[2]}. Renouvellement automatique au même prix, sauf résiliation au moins 24 h avant la fin de la période, depuis les réglages de votre compte App Store ou Google Play. Toujours gratuit pour tous : vérifications, signalement, blocage, aide.</p>
+  <p class="fine"><button class="inline-link" data-a="toast" data-m="Conditions d’utilisation : à rédiger avec un juriste avant publication.">Conditions d’utilisation</button> · <button class="inline-link" data-a="toast" data-m="Politique de confidentialité : à rédiger avec le DPO avant publication.">Politique de confidentialité</button> · <button class="inline-link" data-a="toast" data-m="Aucun achat à restaurer sur ce compte.">Restaurer un achat</button></p>
   </div>${bottom(`<button class="btn primary" data-a="buyPage">Prendre l’abonnement · ${cur[2]}</button><button class="btn ghost" data-a="back">Plus tard</button>`)}</div>`};
 SH.paywall=s=>{const R={likes:['Vous avez utilisé vos '+S.quota.likes+' J’aime gratuits','Pour continuer à aimer des profils, prenez l’abonnement Premium.'],msgs:['Vous avez envoyé vos '+S.quota.msgs+' messages gratuits','Pour continuer, prenez l’abonnement Premium. Signaler ou bloquer reste toujours possible.'],likes2:['Voir qui vous a aimé',''],undo:['Revenir sur un profil passé','Cette option fait partie de l’abonnement Premium. Vous pouvez aussi revoir les profils passés quand vous les aurez tous vus.'],sub:['Abonnement Premium','']};const r=R[s.r==='likes'&&S.tab==='likes'?'likes2':s.r]||R.sub;const plans=[['1','1 mois','9,99 €','9,99 € par mois'],['3','3 mois','23,97 €','soit 7,99 € par mois'],['6','6 mois','35,94 €','soit 5,99 € par mois']];const cur=plans.find(p=>p[0]===S.plan);
  return `${shHead(r[0],r[1])}<ul class="perks"><li>${ic('heart',20)}J’aime et messages illimités</li><li>${ic('eye',20)}Voir qui vous a aimé</li><li>${ic('undo',20)}Revenir sur un profil passé</li><li>${ic('sliders',20)}Filtres supplémentaires</li></ul>
@@ -1214,7 +1245,7 @@ function panelHTML(){const j=(a,l,d)=>`<button class="jump" data-a="${a}"><span>
  <p class="p-kbd">Clavier dans Découvrir : ← Passer, → J’aime. Échap ferme un panneau.</p>`}
 
 /* ---------------- Actions ---------------- */
-function demoUser(){Object.assign(S.me,{prenom:'Alex',contact:'06 12 34 56 78',dob:'1993-04-02',age:ageOf('1993-04-02'),genre:'Une personne non binaire',pronoms:'iel',cherche:['Des femmes','Des hommes'],ville:'Lyon 3e',photos:[{look:LOOKS_EX[0],scene:0},{look:LOOKS_EX[1],scene:1},{look:LOOKS_EX[2],scene:2}],bio:'Photographe amateur, toujours partant·e pour une balade en bord de Saône et un bon resto vietnamien.',intention:'Une relation sérieuse',interests:['Randonnée','Cuisine','Cinéma','Photographie']})}
+function demoUser(){Object.assign(S.me,{prenom:'Alex',country:'FR',contact:'06 12 34 56 78',dob:'1993-04-02',age:ageOf('1993-04-02'),genre:'Une personne non binaire',pronoms:'iel',cherche:['Des femmes','Des hommes'],ville:'Lyon 3e',photos:[{look:LOOKS_EX[0],scene:0},{look:LOOKS_EX[1],scene:1},{look:LOOKS_EX[2],scene:2}],bio:'Photographe amateur, toujours partant·e pour une balade en bord de Saône et un bon resto vietnamien.',intention:'Une relation sérieuse',interests:['Randonnée','Cuisine','Cinéma','Photographie']})}
 function ensureDemo(verified=true){S.mode='app';S.sheet=null;S.match=null;clearTimers();if(!S.me.prenom||!S.me.photos.length)demoUser();if(verified&&!isVerified()){S.verif={id:'ok',video:'ok',idAttempts:1,videoAttempts:1,idDate:todayFR(),videoDate:todayFR()};S.rulesAccepted=true}}
 function toPhone(){if(window.matchMedia('(max-width: 880px)').matches)$phone.scrollIntoView({behavior:'smooth',block:'start'})}
 function topProfile(){return deckList()[0]}
@@ -1255,15 +1286,15 @@ const A={
  reset:()=>{reset()},
  demoLogin:()=>{ensureDemo(true);enterApp();toast('Connecté au compte de démonstration d’Alex.')},
  ctype:d=>{S.me.contactType=d.v;S.me.contact='';S.err={};render()},
- sendCode:()=>{const v=(S.me.contact||'').trim();if(S.me.contactType==='tel'){if(!/^(\+33\s?|0)[67](\s?\d{2}){4}$/.test(v))return setErr('contact','Saisissez un numéro de mobile valide, par exemple 06 12 34 56 78.')}else if(!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(v))return setErr('contact','Saisissez une adresse e-mail valide, par exemple prenom@exemple.fr.');S.tmp.otp='';nav('otp')},
+ sendCode:()=>{const v=(S.me.contact||'').trim();if(S.me.contactType==='tel'){if(!validPhone(v,S.me.country))return setErr('contact',`Saisissez un numéro de mobile valide, par exemple ${ctry(S.me.country)[4]}, ou au format international (${ctry(S.me.country)[2]} …).`)}else if(!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(v))return setErr('contact','Saisissez une adresse e-mail valide, par exemple prenom@exemple.fr.');S.tmp.otp='';nav('otp')},
  checkOtp:()=>{if(!/^\d{6}$/.test(S.tmp.otp||''))return setErr('otp','Le code contient 6 chiffres. Vérifiez votre dernier SMS ou e-mail.');nav('dob')},
  saveDob:()=>{const a=ageOf(S.me.dob);if(a==null||a>110)return setErr('dob','Indiquez votre date de naissance complète.');if(a<18){S.me={...initState().me};S.screen='minor';S.stack=[];render();return}S.me.age=a;nav('basics');toast(`Âge affiché sur votre profil : ${a} ans.`)},
  saveBasics:()=>{const e={};const pn=S.me.prenom.trim();if(pn.length<2)e.prenom='Indiquez votre prénom d’usage (2 lettres minimum).';else if(/[\d@/]|http|www/i.test(pn))e.prenom='Utilisez uniquement votre prénom, sans chiffres ni lien.';if(!S.me.genre)e.genre='Choisissez l’option qui vous correspond.';if(!S.me.cherche.length)e.cherche='Choisissez au moins une option.';if(Object.keys(e).length){S.err=e;render();return}S.me.prenom=pn;nav('location')},
- useLoc:()=>{S.me.ville='Lyon 3e';S.err={};render();toast('Position détectée : Lyon 3e (approximative).')},
+ useLoc:()=>{const c=S.me.country==='FR'?'Lyon 3e':(CITY_BY_COUNTRY[S.me.country]||['?'])[0];S.me.ville=c;S.err={};render();toast(`Position détectée : ${c}, ${ctry(S.me.country)[1]} (approximative).`)},
  cityInput:()=>{S.tmp.cityInput=true;render();const f=document.getElementById('f-city');if(f)f.focus()},
  setCity:d=>{S.me.ville=d.v;S.tmp.cityInput=false;S.err={};render()},
  clearCity:()=>{S.me.ville='';render()},
- saveLoc:()=>{if(!S.me.ville)return setErr('ville','Choisissez votre position ou saisissez une ville pour continuer.');nav('photos')},
+ saveLoc:()=>{if(!S.me.ville)return setErr('ville','Choisissez votre position ou saisissez une ville pour continuer.');if(S.editing){S.editing=false;back();toast('Localisation enregistrée.');return}nav('photos')},
  photoEx:()=>{if(S.me.photos.length>=6)return toast('6 photos au maximum.');const i=S.me.photos.length;S.me.photos.push({look:LOOKS_EX[i%3],scene:i%3});S.err={};render();toast('Photo ajoutée. Analyse automatique : conforme.')},
  photoRm:d=>{S.me.photos.splice(+d.i,1);render()},
  photoMain:d=>{const [p]=S.me.photos.splice(+d.i,1);S.me.photos.unshift(p);render();toast('Photo principale modifiée.')},
@@ -1288,7 +1319,7 @@ const A={
  openChat:d=>{S.unread[d.id]=false;S.tmp.msg='';S.scrollBottom=true;nav('chat',{chatId:d.id})},
  matchChat:()=>{const id=S.match;S.match=null;S.tab='messages';S.stack=[{screen:'tabs',tab:'messages',setKey:null,view:null,chatId:null}];S.screen='chat';S.chatId=id;S.tmp.msg='';render()},
  matchClose:()=>{S.match=null;if(S.pendingPaywall){goPaywall(S.pendingPaywall);return}render()},
- send:()=>{const t=(S.tmp.msg||'').trim();if(!t)return;if(!S.premium&&S.msgsUsed>=S.quota.msgs){goPaywall('msgs');return}if(RUDE.test(t)){openSheet('presend',{kind:'rude',text:t});return}const hd=detectHandle(t);if(hd){swapFromMessage(hd);return}if(personal(t)){openSheet('presend',{kind:'perso',text:t});return}pushMsg(t)},
+ send:()=>{const t=(S.tmp.msg||'').trim();if(!t){toast('Écrivez d’abord votre message.');const f=document.getElementById('f-msg');if(f)f.focus();return}if(!S.premium&&S.msgsUsed>=S.quota.msgs){goPaywall('msgs');return}if(RUDE.test(t)){openSheet('presend',{kind:'rude',text:t});return}const hd=detectHandle(t);if(hd){swapFromMessage(hd);return}if(personal(t)){openSheet('presend',{kind:'perso',text:t});return}pushMsg(t)},
  forceSend:()=>pushMsg(S.sheet.text),
  swapOpen:d=>{const c=S.convos[S.chatId]||[];const card=d.i!=null?c[+d.i]:null;if(msgsLocked()){goPaywall('msgs');return}if(!card&&swapGate())return;const net=card?card.net:(d.net||S.tmp.net||'Snapchat');S.tmp.net=net;S.tmp.handle=S.me.socials[net]||'';S.tmp.saveHandle=true;S.err={};openSheet('swap',{i:d.i})},
  swapNet:d=>{S.tmp.net=d.v;S.tmp.handle=S.me.socials[d.v]||'';S.err={};render()},
@@ -1399,10 +1430,11 @@ document.addEventListener('click',e=>{
  const fn=A[el.dataset.a];if(!fn)return;e.preventDefault();fn(el.dataset,el,e)});
 const LIVE={
  bio:el=>{const c=document.getElementById('bio-count');if(c)c.textContent=el.value.length+' / 300';const w=document.getElementById('bio-warn');if(w)w.hidden=!personal(el.value)},
- city:el=>{const box=document.getElementById('city-sug');if(!box)return;const q=el.value.toLowerCase();box.innerHTML=CITIES.filter(c=>!q||c.toLowerCase().includes(q)).slice(0,5).map(c=>`<button class="row" data-a="setCity" data-v="${esc(c)}">${ic('pin',18)}<span class="grow"><b>${esc(c)}</b></span></button>`).join('')}
+ country:()=>{S.me.ville='';S.tmp.city=''},
+ city:el=>{const box=document.getElementById('city-sug');if(!box)return;const q=el.value.toLowerCase();box.innerHTML=citySuggest(el.value).map(c=>`<button class="row" data-a="setCity" data-v="${esc(c)}">${ic('pin',18)}<span class="grow"><b>${esc(c)}</b></span></button>`).join('')}
 };
 document.addEventListener('input',e=>{const el=e.target,k=el.dataset&&el.dataset.bind;if(!k)return;let v=el.value;if(el.type==='number'||el.type==='range'){v=Number(v);if(isNaN(v))return}setPath(S,k,v);
- if(el.dataset.out){const o=document.getElementById(el.dataset.out);if(o)o.textContent=v+(el.dataset.fmt==='km'?' km':'')}
+ if(el.dataset.out){const o=document.getElementById(el.dataset.out);if(o)o.textContent=el.dataset.fmt==='km'?distOut(v):v}
  if(el.dataset.live&&LIVE[el.dataset.live])LIVE[el.dataset.live](el)});
 document.addEventListener('change',e=>{const el=e.target;
  if(el.id==='file-photo'&&el.files&&el.files[0]){const fr=new FileReader();fr.onload=()=>{if(S.me.photos.length<6){S.me.photos.push({src:fr.result});S.err={};render();toast('Photo ajoutée. Analyse automatique : conforme.')}};fr.readAsDataURL(el.files[0]);return}
