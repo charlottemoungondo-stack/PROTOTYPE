@@ -1,0 +1,6 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Redirection</title>
+<script>
+  var p = location.pathname;
+  if (p.indexOf('/PROTOTYPE/app/') === 0) location.replace('/PROTOTYPE/app/' + location.hash);
+  else location.replace('/PROTOTYPE/');
+</script></head><body>Redirection…</body></html>
