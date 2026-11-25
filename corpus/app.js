@@ -35,7 +35,7 @@
   /* ---------- Données locales ---------- */
   const KEY = 'corpus.v1', PKEY = 'corpus.photos.v1';
   const DEFAULTS = {
-    settings: { coach: 'f', skin: 2, hair: 0, outfit: 0, voice: true, voiceURI: '', count: true, cues: true, tempo: 'normal', rest: 30, warm: true, listen: false, realistic: true },
+    settings: { coach: 'f', skin: 2, hair: 0, outfit: 0, voice: true, voiceURI: '', count: true, cues: true, tempo: 'normal', rest: 30, warm: true, listen: false, realistic: true, music: true, cuts: true },
     place: 'maison', aud: 'tous', custom: [], history: [], challenges: {}, measures: [], profile: null,
   };
   function load(k, fb) { try { const v = JSON.parse(localStorage.getItem(k)); return v || fb; } catch (e) { return fb; } }
@@ -169,6 +169,41 @@
     $('#loading').hidden = true;
   }
 
+  /* ---------- Musique d'entraînement (composée en direct, sans droits) ---------- */
+  const Music = {
+    ctx: null, on: false, gain: null, timer: null, step: 0, bpm: 124, noise: null, level: 0.2,
+    start() {
+      if (!S.settings.music || this.on) return;
+      try { this.ctx = this.ctx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      const c = this.ctx;
+      if (!this.noise) { const b = c.createBuffer(1, c.sampleRate, c.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; this.noise = b; }
+      this.gain = c.createGain(); this.gain.gain.value = 0; this.gain.connect(c.destination);
+      this.gain.gain.setTargetAtTime(this.level, c.currentTime, 0.4);
+      this.on = true; this.next = c.currentTime + 0.1; this.step = 0;
+      this.timer = setInterval(() => this.schedule(), 40);
+    },
+    stop() {
+      if (!this.on) return; this.on = false; clearInterval(this.timer);
+      const g = this.gain; g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.25); setTimeout(() => g.disconnect(), 1200);
+    },
+    setLevel(v) { this.level = v; if (this.on) this.gain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.2); },
+    duck(on) { if (this.on) this.gain.gain.setTargetAtTime(on ? this.level * 0.35 : this.level, this.ctx.currentTime, 0.12); },
+    schedule() { const spb = 60 / this.bpm / 4; while (this.next < this.ctx.currentTime + 0.25) { this.play(this.step, this.next, spb); this.next += spb; this.step = (this.step + 1) % 64; } },
+    env(node, t, a, d, peak) { const g = this.ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); node.connect(g); g.connect(this.gain); return g; },
+    play(st, t, spb) {
+      const c = this.ctx;
+      if (st % 4 === 0) { const o = c.createOscillator(); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.14); this.env(o, t, 0.004, 0.22, 0.9); o.start(t); o.stop(t + 0.3); }
+      if (st % 8 === 4) { const n = c.createBufferSource(); n.buffer = this.noise; const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1600; n.connect(f); this.env(f, t, 0.002, 0.14, 0.5); n.start(t); n.stop(t + 0.2); }
+      if (st % 2 === 1) { const n = c.createBufferSource(); n.buffer = this.noise; const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7500; n.connect(f); this.env(f, t, 0.001, st % 4 === 3 ? 0.07 : 0.03, 0.18); n.start(t); n.stop(t + 0.1); }
+      const bar = Math.floor(st / 16) % 4, roots = [55, 55, 43.65, 49];
+      if (st % 4 === 2 || st % 16 === 14) { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = roots[bar]; const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 380; o.connect(f); this.env(f, t, 0.005, spb * 1.6, 0.35); o.start(t); o.stop(t + spb * 2); }
+      if (st % 16 === 0) {
+        for (const m of [2, 2.5198, 2.9966]) { const o = c.createOscillator(); o.type = 'triangle'; o.frequency.value = roots[bar] * m * 2; this.env(o, t, 0.25, spb * 14, 0.035); o.start(t); o.stop(t + spb * 16); }
+      }
+    },
+  };
+
   /* ---------- Commandes vocales ---------- */
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const Listen = {
@@ -202,7 +237,7 @@
     },
   };
 
-  function speaking(on) { $('#coach-line').classList.toggle('speaking', on); E.speaking = on; }
+  function speaking(on) { $('#coach-line').classList.toggle('speaking', on); E.speaking = on; Music.duck(on); }
   function setCoachText(t) { $('#coach-text').textContent = t; }
   const sleepPlain = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -350,10 +385,11 @@
     const r = run = { seenMistake: {}, plan, paused: false, skip: false, skipRest: false, stop: false, t0: Date.now(), pausedMs: 0, reps: 0, idx: 0, set: 1, phase: 'intro', done: [],
       warmN: plan.items.filter((x) => x.phase === 'warm').length, mainN: plan.items.filter((x) => !x.phase).length };
     if (navigator.wakeLock) navigator.wakeLock.request('screen').then((l) => { r.lock = l; }).catch(() => {});
+    Music.start(); E.autoCut = S.settings.cuts;
     buildStrip(plan); renderControls(); if (state.tab !== 'accueil') state.tab = 'seances'; render(); updateStrip(r); Listen.sync();
     try {
       const first = plan.items[0];
-      E.setExercise(first.ex); E.setMode('loop'); E.setSpeed(0.7 * tempo()); setViewButtons('');
+      E.setExercise(first.ex); E.setMode('loop'); E.setSpeed(0.85 * tempo()); setViewButtons('');
       setHud(plan.quick ? 'Une série' : first.phase ? PHASE_LABEL[first.phase] : plan.title, first.ex.name, exMeta(first.ex, first.sets, first.n));
       if (!plan.quick) {
         const mins = estimateMin(plan.items);
@@ -363,7 +399,7 @@
         r.idx = i; r.set = 1; r.skip = false; updateStrip(r); render();
         const it = plan.items[i], ex = it.ex;
         if (E.ex !== ex) { E.setExercise(ex); }
-        E.setMode('loop'); E.setSpeed(0.7 * tempo());
+        E.setMode('loop'); E.setSpeed(0.85 * tempo());
         const eyebrow = plan.quick ? 'Une série' : it.phase ? PHASE_LABEL[it.phase] : `Exercice ${i + 1 - r.warmN} sur ${r.mainN}`;
         setHud(eyebrow, ex.name, exMeta(ex, it.sets, it.n));
         $('#counter').hidden = true; r.phase = 'intro';
@@ -373,11 +409,11 @@
         if (it.phase === 'cool' && (i === 0 || !plan.items[i - 1].phase)) await sayR(r, 'Bravo, le plus dur est fait ! On s\'étire pour bien récupérer.');
         if (it.phase) await sayR(r, `${ex.name}, ${amount}${perSide}. ${ex.steps[0]}`);
         else {
-          await sayR(r, `${ex.name}. ${it.sets > 1 ? it.sets + ' séries de ' : ''}${amount}${perSide}. ${ex.steps[0]} ${ex.steps[1] || ''}`);
+          await sayR(r, `${ex.name} ! ${it.sets > 1 ? it.sets + ' séries de ' : ''}${amount}${perSide}. ${ex.steps[0]}`);
           const co = CO[ex.id], mx = mistakeEx(ex);
           if (mx && !r.seenMistake[ex.id]) {
             r.seenMistake[ex.id] = true;
-            E.setExercise(mx); E.setMode('loop'); E.setSpeed(0.7 * tempo()); overlay(warnPill(co.mistake.label));
+            E.setExercise(mx); E.setMode('loop'); E.setSpeed(0.85 * tempo()); overlay(warnPill(co.mistake.label));
             await sayR(r, `Regarde bien l'erreur à éviter : ${co.mistake.label.toLowerCase()}.`);
             overlay(null); E.setExercise(ex); E.setMode('loop');
             await sayR(r, `Et voici le bon geste. ${co.errors && co.errors[1] ? 'Attention aussi : ' + co.errors[1].charAt(0).toLowerCase() + co.errors[1].slice(1) : ''}`);
@@ -418,13 +454,13 @@
     r.phase = 'count';
     E.setMode('settle'); E.setSpeed(tempo());
     $('#counter').hidden = true;
-    const lines = side > 0 ? 'Autre côté. En position.' : set === 1 ? 'En position.' : `Série ${set}${set === sets ? ', la dernière' : ''}. En position.`;
+    const lines = side > 0 ? 'Autre côté !' : set === 1 ? 'En position.' : `Série ${set}${set === sets ? ', la dernière !' : ' !'}`;
     await sayR(r, lines);
     if (light && side === 0) { await sleep(600, r); Voice.say('Go !', { wait: false, interrupt: true }); return; }
     for (const n of [3, 2, 1]) {
       overlay(`<div class="n">${n}</div>`);
       Voice.say(['trois', 'deux', 'un'][3 - n], { wait: false, interrupt: true });
-      await sleep(850, r);
+      await sleep(650, r);
       if (r.skip) { overlay(null); return; }
     }
     overlay(null);
@@ -444,6 +480,7 @@
       const finish2 = (fn) => { clearInterval(iv); E.onCount = null; fn(); };
       E.onCount = () => {
         c++; r.reps++; setCount(c, n);
+        try { if (navigator.vibrate) navigator.vibrate(25); } catch (e) { /* pas de vibration */ }
         let t = String(c);
         if (c === n) t = `${c}. Bravo !`;
         else if (c === n - 1 && n > 3) t = `${c}, dernière !`;
@@ -506,11 +543,11 @@
     if (!run) return;
     run.paused = !run.paused;
     if (run.paused) {
-      run.pauseAt = Date.now(); run.modeBefore = E.mode; E.setMode('still'); Voice.stop();
+      run.pauseAt = Date.now(); run.modeBefore = E.mode; E.setMode('still'); Voice.stop(); Music.setLevel(0.04);
       overlay('<div class="lbl">Pause</div><div class="n">II</div>');
       setCoachText('Pause. Reprends quand tu veux.');
     } else {
-      run.pausedMs += Date.now() - run.pauseAt; E.setMode(run.modeBefore || 'loop'); overlay(null);
+      run.pausedMs += Date.now() - run.pauseAt; E.setMode(run.modeBefore || 'loop'); overlay(null); Music.setLevel(0.2);
       Voice.say('On reprend !', { wait: false });
     }
     renderControls();
@@ -527,6 +564,7 @@
     if (r.finished) return; r.finished = true;
     if (r.lock) r.lock.release().catch(() => {});
     if (run === r) run = null;
+    Music.stop(); E.autoCut = false;
     Listen.sync();
     Voice.stop();
     const mins = Math.max(1, Math.round((Date.now() - r.t0 - r.pausedMs) / 60000));
@@ -1118,6 +1156,8 @@
         <label class="toggle">Compter les répétitions à voix haute<input type="checkbox" id="s-count" ${st.count ? 'checked' : ''}></label>
         <label class="toggle">Conseils et encouragements pendant les séries<input type="checkbox" id="s-cues" ${st.cues ? 'checked' : ''}></label>
         <label class="toggle">Échauffement et étirements automatiques<input type="checkbox" id="s-warm" ${st.warm ? 'checked' : ''}></label>
+        <label class="toggle">Musique d'entraînement<input type="checkbox" id="s-music" ${st.music ? 'checked' : ''}></label>
+        <label class="toggle">Caméra dynamique (change d'angle pendant les séries)<input type="checkbox" id="s-cuts" ${st.cuts ? 'checked' : ''}></label>
         <label class="toggle">Commandes vocales pendant la séance<input type="checkbox" id="s-listen" ${st.listen ? 'checked' : ''}></label>
         <div class="note">Dis « pause », « reprends », « suivant », « répète » ou « stop ». Le micro ne s'active que pendant une séance.${Listen.supported ? '' : ' Ce navigateur ne propose pas la reconnaissance vocale : essaie Chrome, Edge ou Safari.'}</div>
         ${synth && !nativeTTS() ? `<div class="form" style="grid-template-columns:1fr"><label>Voix<select id="s-vsel"><option value="">Automatique</option>${voices.map((v) => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === st.voiceURI ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('')}</select></label></div>
@@ -1263,6 +1303,8 @@
       else if (t.id === 's-cues') { S.settings.cues = t.checked; save(); }
       else if (t.id === 'wz-ok') { state.wiz.d.okHealth = t.checked; render(); }
       else if (t.id === 's-warm') { S.settings.warm = t.checked; save(); }
+      else if (t.id === 's-music') { S.settings.music = t.checked; save(); if (!t.checked) Music.stop(); else if (run) Music.start(); }
+      else if (t.id === 's-cuts') { S.settings.cuts = t.checked; save(); E.autoCut = t.checked && !!run; }
       else if (t.id === 's-real') { S.settings.realistic = t.checked; save(); if (!t.checked && E.custom && E.custom.builtin) E.clearModel(); else applyRealistic(); render(); }
       else if (t.id === 's-listen') { S.settings.listen = t.checked; save(); Listen.sync(); }
       else if (t.id === 's-vsel') { S.settings.voiceURI = t.value; save(); Voice.pick(); }

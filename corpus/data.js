@@ -17,7 +17,7 @@
       id: 'squat', name: 'Squat', zones: ['quadriceps', 'fessiers', 'ischios'], place: ['maison', 'salle'], equip: [], level: 1,
       cycle: 3.2, count: [0.92], def: { sets: 3, reps: 15 }, aud: ['femme', 'homme', 'running'],
       base: { hip: [0, 10, 18] },
-      keys: [{ t: 0 }, { t: 0.42, rp: 22, sp: 14, nk: -16, hip: [104, 12, 22], kn: 112, sh: [112, 8, 4], el: 4 }, { t: 0.55, rp: 22, sp: 14, nk: -16, hip: [104, 12, 22], kn: 112, sh: [112, 8, 4], el: 4 }],
+      keys: [{ t: 0 }, { t: 0.42, rp: 22, sp: 14, nk: -18, hip: [104, 12, 22], kn: 112, sh: [126, 6, 1], el: 2 }, { t: 0.55, rp: 22, sp: 14, nk: -18, hip: [104, 12, 22], kn: 112, sh: [126, 6, 1], el: 2 }],
       plant: { legL: {}, legR: {} }, poles: { leg: [0.35, 0, 1] }, anchor: { m: ['heelL', 'heelR', 'toeL', 'toeR'] },
       steps: ['Pieds largeur d\'épaules, pointes légèrement ouvertes.', 'Descends en poussant les fesses vers l\'arrière, comme pour t\'asseoir.', 'Genoux dans l\'axe des pieds, poitrine haute.', 'Remonte en poussant dans les talons.'],
       cues: ['Pousse dans les talons', 'Poitrine haute', 'Genoux vers l\'extérieur', 'Serre les fessiers en haut'],

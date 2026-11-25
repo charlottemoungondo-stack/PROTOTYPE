@@ -169,7 +169,7 @@
   const SYM = ['cl', 'cp', 'sh', 'tw', 'el', 'sup', 'wr', 'hip', 'kn', 'an'];
   const NEUTRAL = {
     rp: 0, rr: 0, ry: 0, sp: 0, spS: 0, spT: 0, nk: 0, nkS: 0, nkT: 0,
-    cl: 0, cp: 0, sh: [0, 7, 0], tw: 0, el: 10, sup: 0, wr: 0,
+    cl: 0, cp: 0, sh: [0, 4, 0], tw: 0, el: 8, sup: 0, wr: 0,
     hip: [0, 3, 4], kn: 2, an: 0, jy: 0,
   };
 
@@ -451,8 +451,15 @@
   }
 
   // Résout la posture complète à la phase t.
+  const ARM_KEYS = /^(sh|el|wr|tw|sup|cl|cp)[LR]$/;
   function solve(rig, ex, t, plants) {
     const P = sample(ex, t);
+    // Mouvement naturel : les bras puis la tête suivent le tronc avec un léger décalage.
+    if (!ex.hold && plants !== null) {
+      const Pa = sample(ex, t - 0.03), Ph = sample(ex, t - 0.05);
+      for (const k in Pa) if (ARM_KEYS.test(k)) P[k] = Pa[k];
+      P.nk = Ph.nk; P.nkS = Ph.nkS; P.nkT = Ph.nkT;
+    }
     applyPose(rig, P);
     const r = rig.b.root;
     r.position.set(0, 0, 0);
@@ -638,6 +645,7 @@
   function buildProps(rig, ex, group) {
     const P = propMats();
     const dyn = [];
+    E.grip = !!(ex.props && ex.props.some((p) => ['dumbbells', 'dumbbell2h', 'barbell', 'shortbar', 'kettlebell', 'pullbar', 'handle'].includes(typeof p === 'string' ? p : p.type)));
     if (!ex.props) return dyn;
     solve(rig, ex, ex.propAt || 0, ex._plants);
     const mk = (n) => rig.markers[n].getWorldPosition(V());
@@ -884,6 +892,20 @@
   };
 
   const VIEWS = { face: 0, tq: 32, side: 90, back: 180 };
+  const CUTS = [[0, 0, 1], [38, 6, 0.86], [-30, 3, 0.95], [70, 12, 1.05], [-55, 8, 0.9]];
+  function cutTo(i) {
+    const ex = E.ex; if (!ex) return;
+    const c = ex.cam || {};
+    const base = c.az !== undefined ? c.az : 32;
+    const k0 = ex._keys[0].P;
+    const horizontal = Math.abs(k0.rp || 0) > 45 || Math.abs(k0.rr || 0) > 45;
+    const [da, de, dk] = CUTS[i % CUTS.length];
+    const az = (base + (horizontal ? da * 0.6 : da)) * D;
+    const el = ((c.el !== undefined ? c.el : 9) + de) * D;
+    const narrow = Math.max(1, (horizontal ? 1.35 : 0.75) / (camera.aspect || 1));
+    const dist = (c.d || 4.3) * Math.pow(narrow, 0.75) * dk;
+    camOffsetGoal = V(Math.sin(az) * Math.cos(el) * dist, Math.sin(el) * dist, Math.cos(az) * Math.cos(el) * dist);
+  }
   E.setView = function (name) {
     E.view = name || 'auto';
     const ex = E.ex;
@@ -960,7 +982,13 @@
       }
       for (const d of dynProps) d.update && d.update();
       updateTail(dt);
-      if (E.custom) { retarget(); animateFace(E.custom); }
+      if (E.custom) { retarget(); animateFace(E.custom); animateFingers(E.custom); }
+      // caméra « tournage » : change d'angle en douceur pendant les séries
+      if (E.mode === 'work' && E.autoCut && !E.userOrbit) {
+        const now = performance.now();
+        if (!E.cutAt) E.cutAt = now;
+        if (now - E.cutAt > 5500) { E.cutAt = now; E.cutIdx = (E.cutIdx || 0) + 1; cutTo(E.cutIdx); }
+      } else E.cutAt = 0;
       // caméra qui suit le corps
       const c = bodyCenter();
       const delta = V().subVectors(c, controls.target).multiplyScalar(1 - Math.exp(-dt * 3));
@@ -1048,7 +1076,8 @@
     for (const s of ['L', 'R']) {
       alignSeg(B['arm' + s], B['forearm' + s], DOWN);
       alignSeg(B['forearm' + s], B['hand' + s], DOWN);
-      const hc = B['hand' + s].children.find((c) => /middle|hand.*1|finger/i.test(c.name)) || B['hand' + s].children[0];
+      const kids = B['hand' + s].children.filter((c) => c.isBone && !/thumb|finger0$/i.test(c.name));
+      const hc = kids.find((c) => /middle|finger2$/i.test(c.name)) || kids.sort((a2, b2) => b2.position.length() - a2.position.length())[0];
       if (hc) alignSeg(B['hand' + s], hc, DOWN);
       alignSeg(B['upleg' + s], B['leg' + s], DOWN);
       alignSeg(B['leg' + s], B['foot' + s], DOWN);
@@ -1141,6 +1170,38 @@
       f.jaw.quaternion.copy(f.jawRest).multiply(_qa.setFromAxisAngle(f.jawAxis, f.jawOpen));
     }
   }
+  // Doigts : légèrement fléchis au repos, refermés quand le coach tient une charge.
+  function setupFingers(prepared) {
+    const fingers = [];
+    for (const s2 of ['L', 'R']) {
+      const hand = prepared.B['hand' + s2]; if (!hand) continue;
+      const n = V(s2 === 'L' ? -1 : 1, 0, 0);
+      for (const root of hand.children.filter((c) => c.isBone)) {
+        const thumb = /thumb|finger0$/i.test(root.name);
+        let bone = root, depth = 0;
+        while (bone && bone.isBone && depth < 3) {
+          const child = bone.children.find((c) => c.isBone);
+          const d = child ? wpos(child).sub(wpos(bone)).normalize() : V(0, -1, 0);
+          const aw = V().crossVectors(d, n).normalize();
+          const rq = bone.getWorldQuaternion(new THREE.Quaternion());
+          const al = aw.clone().applyQuaternion(rq.clone().invert());
+          fingers.push({ bone, rest: bone.quaternion.clone(), axis: al, depth, thumb });
+          bone = child; depth++;
+        }
+      }
+    }
+    prepared.fingers = fingers;
+  }
+  const RELAX = [14, 18, 12], GRIP = [72, 88, 58];
+  function animateFingers(C) {
+    if (!C.fingers) return;
+    const g = E.grip ? 1 : 0;
+    C.gripK = (C.gripK || 0) + (g - (C.gripK || 0)) * 0.2;
+    for (const f of C.fingers) {
+      const a = (RELAX[f.depth] + (GRIP[f.depth] - RELAX[f.depth]) * C.gripK) * (f.thumb ? 0.45 : 1) * D;
+      f.bone.quaternion.copy(f.rest).multiply(_qb.setFromAxisAngle(f.axis, a));
+    }
+  }
   function setupFace(prepared) {
     const sc = prepared.scene, byName = {};
     sc.traverse((o) => { if (o.isBone) byName[o.name.toLowerCase().replace(/[^a-z]/g, '')] = o; });
@@ -1154,7 +1215,7 @@
   }
 
   E.useModel = function (prepared) {
-    setupFace(prepared);
+    setupFace(prepared); if (!prepared.fingers) setupFingers(prepared);
     E.clearModel(true);
     E.custom = prepared;
     avatarHolder.add(prepared.scene);
