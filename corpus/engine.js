@@ -775,6 +775,57 @@
     return dyn;
   }
 
+  /* ---------- Couche de vie : ce qui distingue un humain d'un automate ---------- */
+  // Au repos le coach respire, transfère son poids, bouge un peu les bras ; il regarde l'utilisateur
+  // quand il lui parle et pendant les mouvements debout.
+  const _lq = new THREE.Quaternion(), _lq2 = new THREE.Quaternion();
+  function lifeLayer(dt) {
+    const b = E.rig.b, t = performance.now() / 1000;
+    const settled = E.mode === 'settle' && Math.abs(E.phase - Math.round(E.phase)) < 1e-3;
+    E.idleK = (E.idleK || 0) + ((settled ? 1 : 0) - (E.idleK || 0)) * Math.min(1, dt * 2.5);
+    const k = E.idleK;
+    // respiration (plus ample après l'effort)
+    const br = Math.sin(t * (1.5 + 0.5 * k)) * (0.014 + 0.024 * k);
+    b.chest.rotation.x += br * 0.5; b.spine.rotation.x -= br * 0.15;
+    for (const s of ['L', 'R']) b['cl' + s].rotation.z += (s === 'L' ? 1 : -1) * br * 0.35;
+    if (k > 0.01) {
+      // transfert de poids et bras relâchés
+      b.spine.rotation.z += Math.sin(t * 0.5) * 0.025 * k;
+      b.chest.rotation.z -= Math.sin(t * 0.5) * 0.012 * k;
+      b.shL.rotation.x += Math.sin(t * 0.8) * 0.035 * k; b.shR.rotation.x += Math.sin(t * 0.8 + 1.3) * 0.035 * k;
+      b.elL.rotation.x -= (0.08 + Math.sin(t * 0.7) * 0.03) * k; b.elR.rotation.x -= (0.08 + Math.sin(t * 0.7 + 2) * 0.03) * k;
+    }
+    b.root.updateMatrixWorld(true);
+    // regard vers l'utilisateur (la caméra)
+    const up = V(0, 1, 0).applyQuaternion(b.chest.getWorldQuaternion(_lq));
+    const upright = up.y > 0.72;
+    let w = 0;
+    if (E.mode === 'work') w = upright ? 0.45 : 0;
+    else w = upright ? (E.speaking ? 0.95 : 0.7) : 0.25 * k;
+    E.lookK = (E.lookK || 0) + (w - (E.lookK || 0)) * Math.min(1, dt * 3);
+    if (E.lookK > 0.01) {
+      const head = b.head;
+      const hp = head.getWorldPosition(V()), hq = head.getWorldQuaternion(_lq);
+      const fwd = V(0, 0, 1).applyQuaternion(hq);
+      const dir = V().subVectors(camera.position, hp).normalize();
+      const ang = fwd.angleTo(dir);
+      if (ang > 0.01 && ang < 1.5) {
+        const lim = Math.min(1, 0.6 / ang);
+        _lq2.setFromUnitVectors(fwd, dir);
+        const part = new THREE.Quaternion().slerp(_lq2, E.lookK * lim);
+        // 40 % au cou, 60 % à la tête
+        const neck = b.neck, nq = neck.getWorldQuaternion(new THREE.Quaternion());
+        const pn = new THREE.Quaternion().slerp(part, 0.4);
+        setWorldQuat(neck, pn.multiply(nq));
+        const hq2 = head.getWorldQuaternion(new THREE.Quaternion());
+        const fwd2 = V(0, 0, 1).applyQuaternion(hq2);
+        const q3 = new THREE.Quaternion().setFromUnitVectors(fwd2, dir);
+        setWorldQuat(head, new THREE.Quaternion().slerp(q3, E.lookK * lim * 0.6).multiply(hq2));
+      }
+    }
+    E.gazeDir = V().subVectors(camera.position, b.head.getWorldPosition(V())).normalize();
+  }
+
   /* ---------- Scène ---------- */
   const E = {
     ex: null, rig: null, plants: null, phase: 0, speed: 1, mode: 'loop', onCount: null,
@@ -955,7 +1006,10 @@
       const ex = E.ex;
       const cycle = (ex.cycle || 3) / E.speed;
       const prev = E.phase;
-      if (E.mode === 'loop' || E.mode === 'work') E.phase += dt / cycle;
+      if (E.mode === 'loop' || E.mode === 'work') {
+        E.phase += dt / cycle * (E.jit || 1);
+        if (Math.floor(E.phase) !== E.lastCycle) { E.lastCycle = Math.floor(E.phase); E.jit = 1 + (Math.random() - 0.5) * 0.12; }
+      }
       else if (E.mode === 'settle') {
         const target = Math.ceil(E.phase - 1e-6);
         E.phase = Math.min(target, E.phase + dt / cycle);
@@ -968,10 +1022,7 @@
         }
       }
       solve(E.rig, ex, E.phase, E.plants);
-      // respiration
-      const br = Math.sin(performance.now() / 1000 * 1.6) * 0.012;
-      E.rig.b.chest.rotation.x += br * 0.5;
-      E.rig.b.chest.updateMatrixWorld(true);
+      lifeLayer(dt);
       if (E.blend < 1 && E.snap) {
         E.blend = Math.min(1, E.blend + dt / 0.7);
         const w = smooth(E.blend);
@@ -1165,6 +1216,17 @@
     if (t > (f.nextBlink || 0)) { f.blinkStart = t; f.nextBlink = t + 2.5 + Math.random() * 3.5; }
     const bk = f.blinkStart ? Math.max(0, 1 - Math.abs((t - f.blinkStart) - 0.07) / 0.07) : 0;
     for (const lid of f.lidsTop) { lid.bone.position.copy(lid.rest).addScaledVector(lid.dir, bk * lid.amt); }
+    if (f.eyes && f.eyes.length && f.headRestInv && C.B.head) {
+      const hR = C.B.head.getWorldQuaternion(new THREE.Quaternion()).multiply(f.headRestInv);
+      for (const e of f.eyes) {
+        const ep = e.bone.getWorldPosition(V());
+        const cur = V(0, 0, 1).applyQuaternion(hR);
+        const dir = V().subVectors(camera.position, ep).normalize();
+        const ang = cur.angleTo(dir);
+        const d = ang < 1.4 ? new THREE.Quaternion().slerp(new THREE.Quaternion().setFromUnitVectors(cur, dir), Math.min(1, 0.45 / Math.max(ang, 1e-3))) : new THREE.Quaternion();
+        setWorldQuat(e.bone, d.multiply(hR).multiply(e.rest));
+      }
+    }
     if (f.jaw) {
       const open = E.speaking ? Math.max(0, Math.sin(t * 17) * 0.5 + Math.sin(t * 9.3) * 0.5) * 0.14 : 0;
       f.jawOpen = (f.jawOpen || 0) + (open - (f.jawOpen || 0)) * 0.35;
@@ -1212,7 +1274,9 @@
       const bn = byName[k], bot = byName[k.replace('top', 'bottom')];
       if (bn && bot) { const dir = bot.position.clone().sub(bn.position); const amt = dir.length() * 0.9; lidsTop.push({ bone: bn, rest: bn.position.clone(), dir: dir.normalize(), amt }); }
     }
-    prepared.face = (jaw || lidsTop.length) ? { jaw, jawRest: jaw ? jaw.quaternion.clone() : null, jawAxis: V(0, 0, 1), lidsTop } : null;
+    const eyes = [byName.bipleye, byName.bipreye, byName.lefteye, byName.righteye].filter(Boolean).map((e) => ({ bone: e, rest: e.getWorldQuaternion(new THREE.Quaternion()) }));
+    const headRestInv = prepared.B.head ? prepared.B.head.getWorldQuaternion(new THREE.Quaternion()).invert() : null;
+    prepared.face = (jaw || lidsTop.length || eyes.length) ? { jaw, jawRest: jaw ? jaw.quaternion.clone() : null, jawAxis: V(0, 0, 1), lidsTop, eyes, headRestInv } : null;
   }
 
   // Silhouette athlétique : la peau (et les vêtements près du corps) est gonflée par zone musculaire,
