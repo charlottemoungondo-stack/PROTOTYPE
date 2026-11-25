@@ -266,6 +266,43 @@
   }
   const warnPill = (txt) => `<div class="warn-pill">À éviter · ${esc(txt)}</div>`;
 
+  /* ---------- Vidéos de démonstration (Léa et Malik filmés par IA) ---------- */
+  // Si une vidéo existe pour l'exercice et le coach, elle remplace le coach 3D ; le compteur suit la fin de chaque répétition.
+  const VideoDemo = {
+    el: null, active: null, onCount: null, lastT: 0, raf: 0,
+    lib() { return (window.CORPUS_VIDEOS || {})[S.settings.coach === 'm' ? 'malik' : 'lea'] || {}; },
+    for(ex) { return ex ? this.lib()[String(ex.id).replace(/[~!]$/, '')] || null : null; },
+    show(ex) {
+      const v = this.for(ex);
+      this.el = this.el || $('#demo-video');
+      if (!v || !this.el) { this.hide(); return false; }
+      if (this.active !== v) {
+        this.active = v; this.el.src = v.src; if (v.poster) this.el.poster = v.poster;
+        this.el.load();
+      }
+      this.el.hidden = false; $('#gl').style.visibility = 'hidden'; $('.views').style.visibility = 'hidden';
+      return true;
+    },
+    hide() { this.active = null; this.onCount = null; if (this.el) { this.el.pause(); this.el.hidden = true; } $('#gl').style.visibility = ''; const vw = $('.views'); if (vw) vw.style.visibility = ''; },
+    play(rate) { if (!this.active) return; this.el.playbackRate = rate || 1; this.el.loop = true; const pr = this.el.play(); if (pr && pr.catch) pr.catch(() => {}); this.track(); },
+    rest() { if (!this.active) return; this.el.pause(); try { this.el.currentTime = 0; } catch (e) { /* vidéo pas encore prête */ } },
+    track() {
+      cancelAnimationFrame(this.raf);
+      this.lastT = this.el.currentTime;
+      const step = () => {
+        if (!this.active) return;
+        const t = this.el.currentTime, ends = this.active.repEnds || [];
+        const wrapped = t < this.lastT - 0.2;
+        for (const e of ends) {
+          if ((!wrapped && this.lastT < e && t >= e) || (wrapped && (this.lastT < e || t >= e))) this.onCount && this.onCount();
+        }
+        this.lastT = t;
+        this.raf = requestAnimationFrame(step);
+      };
+      this.raf = requestAnimationFrame(step);
+    },
+  };
+
   /* ---------- État de l'interface ---------- */
   const state = { tab: 'accueil', tip: null, editProfile: false, exQuery: '', exZones: new Set(), exDetail: null, selPhotos: [], confirm: null, previewEx: byId.squat };
   let run = null;
@@ -317,6 +354,7 @@
     if (run) return;
     showInset(ex);
     E.setExercise(ex); E.setMode('loop'); E.setSpeed(tempo() * 0.9);
+    if (VideoDemo.show(ex)) VideoDemo.play(1);
     setViewButtons('');
     const d = ex.def;
     setHud(ex.zones.map((z) => zoneLabel[z]).slice(0, 3).join(' · '), ex.name, exMeta(ex, d.sets, d.reps || d.secs));
@@ -413,6 +451,7 @@
         const eyebrow = plan.quick ? 'Une série' : it.phase ? PHASE_LABEL[it.phase] : `Exercice ${i + 1 - r.warmN} sur ${r.mainN}`;
         setHud(eyebrow, ex.name, exMeta(ex, it.sets, it.n));
         $('#counter').hidden = true; r.phase = 'intro';
+        if (VideoDemo.show(ex)) VideoDemo.play(0.9);
         const amount = ex.hold ? `${it.n} secondes` : `${it.n} répétitions`;
         const perSide = ex.sided ? (ex.hold ? ' de chaque côté' : ' par côté') : '';
         if (it.phase === 'warm' && i === 0) await sayR(r, 'On commence par s\'échauffer, tranquillement.');
@@ -421,7 +460,7 @@
         else {
           await sayR(r, `${ex.name} ! ${it.sets > 1 ? it.sets + ' séries de ' : ''}${amount}${perSide}. ${ex.steps[0]}`);
           const co = CO[ex.id], mx = mistakeEx(ex);
-          if (mx && !r.seenMistake[ex.id]) {
+          if (mx && !VideoDemo.for(ex) && !r.seenMistake[ex.id]) {
             r.seenMistake[ex.id] = true;
             E.setExercise(mx); E.setMode('loop'); E.setSpeed(0.85 * tempo()); overlay(warnPill(co.mistake.label));
             await sayR(r, `Regarde bien l'erreur à éviter : ${co.mistake.label.toLowerCase()}.`);
@@ -432,6 +471,7 @@
           }
         }
         showInset(ex);
+        if (VideoDemo.show(ex)) VideoDemo.play(1);
         const sides = ex.sided ? [ex, E.mirror(ex)] : [ex];
         for (let set = 1; set <= it.sets && !r.skip; set++) {
           r.set = set; updateStrip(r);
@@ -463,7 +503,7 @@
 
   async function countdown(r, set, sets, side, light) {
     r.phase = 'count';
-    E.setMode('settle'); E.setSpeed(tempo());
+    E.setMode('settle'); E.setSpeed(tempo()); VideoDemo.rest();
     $('#counter').hidden = true;
     const lines = side > 0 ? 'Autre côté !' : set === 1 ? 'En position.' : `Série ${set}${set === sets ? ', la dernière !' : ' !'}`;
     await sayR(r, lines);
@@ -488,8 +528,8 @@
       const tp = CO[ex.id.replace(/[~!]$/, '')] && CO[ex.id.replace(/[~!]$/, '')].tempo;
       if (tp && FIRST_REP[tp] && r.set === 1 && S.settings.cues) setTimeout(() => { if (c === 0 && run === r) Voice.say(FIRST_REP[tp], { wait: false, rate: 1.08 }); }, 250);
       const cue = ex.cues[Math.floor(Math.random() * ex.cues.length)];
-      const finish2 = (fn) => { clearInterval(iv); E.onCount = null; fn(); };
-      E.onCount = () => {
+      const finish2 = (fn) => { clearInterval(iv); E.onCount = null; VideoDemo.onCount = null; fn(); };
+      const onRep = () => {
         c++; r.reps++; setCount(c, n);
         try { if (navigator.vibrate) navigator.vibrate(25); } catch (e) { /* pas de vibration */ }
         let t = String(c);
@@ -499,8 +539,9 @@
         else if (c === cueAt && S.settings.cues) t = `${c}. ${cue}.`;
         else if (c === hypeAt && S.settings.cues) t = `${c}. ${HYPE[Math.floor(Math.random() * HYPE.length)]}`;
         if (S.settings.count) Voice.say(t, { wait: false, interrupt: true }); else setCoachText(t);
-        if (c >= n) finish2(() => { E.setMode('settle'); res(); });
+        if (c >= n) finish2(() => { E.setMode('settle'); VideoDemo.rest(); res(); });
       };
+      if (VideoDemo.active) { VideoDemo.onCount = onRep; VideoDemo.play(tempo()); } else E.onCount = onRep;
       const iv = setInterval(() => {
         if (r.stop) finish2(() => rej(STOP));
         else if (r.skip) finish2(res);
@@ -531,6 +572,7 @@
     $('#counter').hidden = true;
     if (next) {
       E.setExercise(next.ex); E.setMode('loop'); E.setSpeed(0.6 * tempo());
+      if (VideoDemo.show(next.ex)) VideoDemo.play(0.8);
       setHud('À suivre', next.ex.name, exMeta(next.ex, next.sets, next.n));
       Voice.say(`Repos, ${secs} secondes. Prochain exercice : ${next.ex.name}.`, { wait: false });
     } else {
@@ -554,11 +596,11 @@
     if (!run) return;
     run.paused = !run.paused;
     if (run.paused) {
-      run.pauseAt = Date.now(); run.modeBefore = E.mode; E.setMode('still'); Voice.stop(); Music.setLevel(0.04);
+      run.pauseAt = Date.now(); run.modeBefore = E.mode; E.setMode('still'); Voice.stop(); Music.setLevel(0.04); if (VideoDemo.active) VideoDemo.el.pause();
       overlay('<div class="lbl">Pause</div><div class="n">II</div>');
       setCoachText('Pause. Reprends quand tu veux.');
     } else {
-      run.pausedMs += Date.now() - run.pauseAt; E.setMode(run.modeBefore || 'loop'); overlay(null); Music.setLevel(0.2);
+      run.pausedMs += Date.now() - run.pauseAt; E.setMode(run.modeBefore || 'loop'); overlay(null); Music.setLevel(0.2); if (VideoDemo.active && run.phase !== 'rest' && run.phase !== 'count') VideoDemo.play(tempo());
       Voice.say('On reprend !', { wait: false });
     }
     renderControls();
