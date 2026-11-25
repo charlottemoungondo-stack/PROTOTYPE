@@ -35,7 +35,7 @@
   /* ---------- Données locales ---------- */
   const KEY = 'corpus.v1', PKEY = 'corpus.photos.v1';
   const DEFAULTS = {
-    settings: { coach: 'f', skin: 2, hair: 0, outfit: 0, voice: true, voiceURI: '', count: true, cues: true, tempo: 'normal', rest: 30 },
+    settings: { coach: 'f', skin: 2, hair: 0, outfit: 0, voice: true, voiceURI: '', count: true, cues: true, tempo: 'normal', rest: 30, warm: true },
     place: 'maison', aud: 'tous', custom: [], history: [], challenges: {}, measures: [],
   };
   function load(k, fb) { try { const v = JSON.parse(localStorage.getItem(k)); return v || fb; } catch (e) { return fb; } }
@@ -179,8 +179,8 @@
     let s = 20;
     for (const it of items) {
       const ex = it.ex || byId[it.id];
-      const work = ex.hold ? it.n : it.n * (ex.cycle || 3) / (ex.count ? ex.count.length : 1);
-      s += 15 + it.sets * (work + 5) + (it.sets - 1) * S.settings.rest + 20;
+      const work = (ex.hold ? it.n : it.n * (ex.cycle || 3) / (ex.count ? ex.count.length : 1)) * (ex.sided ? 2 : 1);
+      s += (it.phase ? 6 : 15) + it.sets * (work + 5) + (it.sets - 1) * S.settings.rest + (it.phase ? 5 : 20);
     }
     return Math.max(1, Math.round(s / 60));
   }
@@ -196,41 +196,76 @@
     if (cur) { const it = r.plan.items[r.idx]; cur.style.setProperty('--p', `${Math.round(((r.set || 1) - 1) / it.sets * 100)}%`); }
   }
 
+  // Échauffement et retour au calme automatiques
+  const WARMUP = [['marche-sur-place', 20], ['cercles-bras', 10], ['cou-rotation', 4], ['squat', 8]];
+  function warmItems() { return WARMUP.map(([id, n]) => ({ ex: byId[id], sets: 1, n, phase: 'warm' })); }
+  function coolItems(items) {
+    const worked = new Set();
+    for (const it of items) for (const z of it.ex.zones) worked.add(z);
+    const scored = EX.filter((e) => e.stretch && e.id !== 'posture-enfant')
+      .map((e, i) => ({ e, i, sc: e.zones.filter((z) => worked.has(z)).length }))
+      .filter((x) => x.sc > 0).sort((a, b) => b.sc - a.sc || a.i - b.i).slice(0, 3).map((x) => x.e);
+    if (!scored.length) scored.push(byId['etir-ischios']);
+    scored.push(byId['posture-enfant']);
+    return scored.map((e) => ({ ex: e, sets: 1, n: e.sided ? 20 : 25, phase: 'cool' }));
+  }
+  const PHASE_LABEL = { warm: 'Échauffement', cool: 'Retour au calme' };
+
   async function startSession(plan) {
     if (run) stopSession(true);
     plan.items = plan.items.map((it) => ({ ex: it.ex || byId[it.id], sets: it.sets, n: it.n }));
-    const r = run = { plan, paused: false, skip: false, skipRest: false, stop: false, t0: Date.now(), pausedMs: 0, reps: 0, idx: 0, set: 1, phase: 'intro', done: [] };
+    if (!plan.quick && S.settings.warm) {
+      const mobility = plan.items.every((it) => it.ex.stretch || it.ex.zones.includes('cou') || it.ex.aud.includes('mobilite'));
+      if (!mobility) plan.items = [...warmItems(), ...plan.items, ...coolItems(plan.items)];
+    }
+    const r = run = { plan, paused: false, skip: false, skipRest: false, stop: false, t0: Date.now(), pausedMs: 0, reps: 0, idx: 0, set: 1, phase: 'intro', done: [],
+      warmN: plan.items.filter((x) => x.phase === 'warm').length, mainN: plan.items.filter((x) => !x.phase).length };
     if (navigator.wakeLock) navigator.wakeLock.request('screen').then((l) => { r.lock = l; }).catch(() => {});
     buildStrip(plan); renderControls(); state.tab = 'seances'; render(); updateStrip(r);
     try {
       const first = plan.items[0];
       E.setExercise(first.ex); E.setMode('loop'); E.setSpeed(0.7 * tempo()); setViewButtons('');
-      setHud(plan.quick ? 'Une série' : plan.title, first.ex.name, exMeta(first.ex, first.sets, first.n));
+      setHud(plan.quick ? 'Une série' : first.phase ? PHASE_LABEL[first.phase] : plan.title, first.ex.name, exMeta(first.ex, first.sets, first.n));
       if (!plan.quick) {
         const mins = estimateMin(plan.items);
-        await sayR(r, `C'est ${coach().name}. Au programme : ${plan.title}, ${plan.items.length} exercices, environ ${mins} minutes. Je compte avec toi. On y va !`);
+        await sayR(r, `C'est ${coach().name}. Au programme : ${plan.title}, ${r.mainN} exercices, environ ${mins} minutes${r.warmN ? ', échauffement et étirements compris' : ''}. Je compte avec toi. On y va !`);
       }
       for (let i = 0; i < plan.items.length; i++) {
         r.idx = i; r.set = 1; r.skip = false; updateStrip(r); render();
         const it = plan.items[i], ex = it.ex;
         if (E.ex !== ex) { E.setExercise(ex); }
         E.setMode('loop'); E.setSpeed(0.7 * tempo());
-        setHud(plan.quick ? 'Une série' : `Exercice ${i + 1} sur ${plan.items.length}`, ex.name, exMeta(ex, it.sets, it.n));
+        const eyebrow = plan.quick ? 'Une série' : it.phase ? PHASE_LABEL[it.phase] : `Exercice ${i + 1 - r.warmN} sur ${r.mainN}`;
+        setHud(eyebrow, ex.name, exMeta(ex, it.sets, it.n));
         $('#counter').hidden = true; r.phase = 'intro';
         const amount = ex.hold ? `${it.n} secondes` : `${it.n} répétitions`;
-        await sayR(r, `${ex.name}. ${it.sets > 1 ? it.sets + ' séries de ' : ''}${amount}. ${ex.steps[0]} ${ex.steps[1] || ''}${ex.note ? ' ' + ex.note : ''}`);
+        const perSide = ex.sided ? (ex.hold ? ' de chaque côté' : ' par côté') : '';
+        if (it.phase === 'warm' && i === 0) await sayR(r, 'On commence par s\'échauffer, tranquillement.');
+        if (it.phase === 'cool' && (i === 0 || !plan.items[i - 1].phase)) await sayR(r, 'Bravo, le plus dur est fait ! On s\'étire pour bien récupérer.');
+        if (it.phase) await sayR(r, `${ex.name}, ${amount}${perSide}. ${ex.steps[0]}`);
+        else await sayR(r, `${ex.name}. ${it.sets > 1 ? it.sets + ' séries de ' : ''}${amount}${perSide}. ${ex.steps[0]} ${ex.steps[1] || ''}`);
+        const sides = ex.sided ? [ex, E.mirror(ex)] : [ex];
         for (let set = 1; set <= it.sets && !r.skip; set++) {
           r.set = set; updateStrip(r);
-          setHud(plan.quick ? 'Une série' : `Exercice ${i + 1} sur ${plan.items.length}`, ex.name, `Série ${set} sur ${it.sets} · ${ex.hold ? it.n + ' s' : it.n + ' répétitions'}`);
-          await countdown(r, set, it.sets);
-          if (r.skip) break;
-          r.phase = 'work';
-          if (ex.hold) await doHold(r, ex, it.n); else await doReps(r, ex, it.n);
+          for (let si = 0; si < sides.length && !r.skip; si++) {
+            const sx = sides[si];
+            if (E.ex !== sx) E.setExercise(sx);
+            const sideTxt = ex.sided ? ` · ${si === 0 ? '1er' : '2e'} côté` : '';
+            setHud(eyebrow, ex.name, `Série ${set} sur ${it.sets} · ${ex.hold ? it.n + ' s' : it.n + ' répétitions'}${sideTxt}`);
+            await countdown(r, set, it.sets, si, !!it.phase);
+            if (r.skip) break;
+            r.phase = 'work';
+            if (ex.hold) await doHold(r, sx, it.n); else await doReps(r, sx, it.n);
+          }
           if (r.skip) break;
           if (set < it.sets) await rest(r, S.settings.rest, null, set);
         }
         r.done.push(i); r.skip = false;
-        if (i < plan.items.length - 1) await rest(r, Math.max(15, S.settings.rest), plan.items[i + 1], 0);
+        if (i < plan.items.length - 1) {
+          const nx = plan.items[i + 1];
+          const secs = it.phase === 'warm' || (it.phase === 'cool' && nx.phase === 'cool') ? 5 : Math.max(15, S.settings.rest);
+          await rest(r, secs, nx, 0);
+        }
       }
       finish(r, true);
     } catch (e) {
@@ -238,12 +273,13 @@
     }
   }
 
-  async function countdown(r, set, sets) {
+  async function countdown(r, set, sets, side, light) {
     r.phase = 'count';
     E.setMode('settle'); E.setSpeed(tempo());
     $('#counter').hidden = true;
-    const lines = set === 1 ? 'En position.' : `Série ${set}${set === sets ? ', la dernière' : ''}. En position.`;
+    const lines = side > 0 ? 'Autre côté. En position.' : set === 1 ? 'En position.' : `Série ${set}${set === sets ? ', la dernière' : ''}. En position.`;
     await sayR(r, lines);
+    if (light && side === 0) { await sleep(600, r); Voice.say('Go !', { wait: false, interrupt: true }); return; }
     for (const n of [3, 2, 1]) {
       overlay(`<div class="n">${n}</div>`);
       Voice.say(['trois', 'deux', 'un'][3 - n], { wait: false, interrupt: true });
@@ -390,7 +426,7 @@
     const r = run;
     return `<div class="card"><div class="row"><div class="grow"><div class="note">Séance en cours</div><h3 class="prog-title">${esc(r.plan.title)}</h3></div>
       <button class="btn ghost sm" data-act="stop">Arrêter</button></div>
-      <ul class="ex-list">${r.plan.items.map((it, i) => `<li><div class="ex-row ${i === r.idx ? 'cur' : r.done.includes(i) ? 'done' : ''}"><div><div class="n">${esc(it.ex.name)}</div><div class="z">${it.ex.zones.map((z) => zoneLabel[z]).slice(0, 3).join(' · ')}</div></div><div class="sr">${it.sets}×${it.n}${it.ex.hold ? 's' : ''}</div></div></li>`).join('')}</ul></div>`;
+      <ul class="ex-list">${r.plan.items.map((it, i) => `<li><div class="ex-row ${i === r.idx ? 'cur' : r.done.includes(i) ? 'done' : ''}"><div><div class="n">${esc(it.ex.name)}</div><div class="z">${it.ex.zones.map((z) => zoneLabel[z]).slice(0, 3).join(' · ')}</div></div><div class="sr">${it.phase ? (it.phase === 'warm' ? 'Échauff.' : 'Étirement') : `${it.sets}×${it.n}${it.ex.hold ? 's' : ''}`}</div></div></li>`).join('')}</ul></div>`;
   }
 
   function progCard(p) {
@@ -398,7 +434,7 @@
     return `<article class="card">
       <div class="row"><div class="grow"><h3 class="prog-title">${esc(p.title)}</h3></div><span class="tag ${p.place === 'salle' ? 'acc' : ''}">${p.place === 'salle' ? 'Salle' : 'Maison'}</span></div>
       <p class="lead">${esc(p.blurb)}</p>
-      <div class="prog-meta"><span><b>${items.length}</b> exercices</span><span><b>~${estimateMin(items)}</b> min</span><span>${esc(p.level)}</span></div>
+      <div class="prog-meta"><span><b>${items.length}</b> exercices</span><span><b>~${estimateMin(items) + (S.settings.warm ? 4 : 0)}</b> min</span><span>${esc(p.level)}</span></div>
       <div class="chips">${zoneChips(programZones(items), 6)}</div>
       ${p.safety ? `<div class="safety">${esc(p.safety)}</div>` : ''}
       <details><summary class="note">Voir les exercices</summary>
@@ -427,11 +463,11 @@
     if (state.exDetail) return viewExDetail(byId[state.exDetail]);
     const q = state.exQuery.trim().toLowerCase();
     const list = EX.filter((e) => S.place === 'salle' || e.place.includes('maison'))
-      .filter((e) => !state.exZones.size || e.zones.some((z) => state.exZones.has(z)))
+      .filter((e) => !state.exZones.size || [...state.exZones].some((z) => (z === 'etirements' ? e.stretch : e.zones.includes(z))))
       .filter((e) => !q || e.name.toLowerCase().includes(q) || e.zones.some((z) => zoneLabel[z].toLowerCase().includes(q)));
     return `<div><h2>${EX.length} exercices, tout le corps</h2><p class="lead">Touche un exercice : le coach le montre en 3D. Tourne autour avec la souris ou le doigt.</p></div>
       <input class="search" id="ex-q" type="search" placeholder="Rechercher : squat, cou, fessiers…" value="${esc(state.exQuery)}" aria-label="Rechercher un exercice">
-      <div class="chips" role="group" aria-label="Zones">${ZONES.map(([k, l]) => `<button class="chip" data-zone="${k}" aria-pressed="${state.exZones.has(k)}">${l}</button>`).join('')}</div>
+      <div class="chips" role="group" aria-label="Zones">${ZONES.concat([['etirements', 'Étirements']]).map(([k, l]) => `<button class="chip" data-zone="${k}" aria-pressed="${state.exZones.has(k)}">${l}</button>`).join('')}</div>
       <div class="note">${list.length} résultat${list.length > 1 ? 's' : ''}${S.place === 'maison' ? ' · lieu : maison' : ' · lieu : salle'}</div>
       <ul class="ex-list">${list.map((e) => `<li><button class="ex-row ${state.previewEx === e ? 'cur' : ''}" data-ex="${e.id}"><div><div class="n">${esc(e.name)}</div><div class="z">${e.zones.map((z) => zoneLabel[z]).join(' · ')}</div></div><div class="z">${esc(equipText(e))}</div></button></li>`).join('') || '<li class="empty">Aucun exercice ne correspond.</li>'}</ul>`;
   }
@@ -444,6 +480,7 @@
       <dl class="kv"><dt>Matériel</dt><dd>${esc(equipText(ex))}</dd><dt>Lieu</dt><dd>${ex.place.map((p) => p === 'salle' ? 'Salle' : 'Maison').join(' et ')}</dd>
         <dt>Volume conseillé</dt><dd>${d.sets} × ${d.reps ? d.reps + ' répétitions' : d.secs + ' secondes'}</dd><dt>Niveau</dt><dd>${['', 'Débutant', 'Intermédiaire', 'Avancé'][ex.level]}</dd></dl>
       <div class="card"><h3>Exécution</h3><ol class="steps">${ex.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>
+      ${ex.sided ? `<div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="note">Exercice unilatéral : en séance, le coach fait les deux côtés.</span><button class="btn ghost sm" data-act="other-side">Voir l'autre côté</button></div>` : ''}
       <div class="card"><h3>Ce que le coach te dira</h3><div class="chips">${ex.cues.map((c) => `<span class="tag">« ${esc(c)} »</span>`).join('')}</div>${ex.note ? `<div class="note">${esc(ex.note)}</div>` : ''}</div>
       <div class="row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn accent" data-act="try">${I.play} Faire 1 série</button>
         <button class="btn ghost" data-act="${inCustom ? 'rm-custom' : 'add-custom'}">${inCustom ? 'Retirer de ma séance' : '+ Ajouter à ma séance'}</button></div>`;
@@ -616,6 +653,7 @@
         <label class="toggle">Voix du coach<input type="checkbox" id="s-voice" ${st.voice ? 'checked' : ''}></label>
         <label class="toggle">Compter les répétitions à voix haute<input type="checkbox" id="s-count" ${st.count ? 'checked' : ''}></label>
         <label class="toggle">Conseils et encouragements pendant les séries<input type="checkbox" id="s-cues" ${st.cues ? 'checked' : ''}></label>
+        <label class="toggle">Échauffement et étirements automatiques<input type="checkbox" id="s-warm" ${st.warm ? 'checked' : ''}></label>
         ${synth ? `<div class="form" style="grid-template-columns:1fr"><label>Voix<select id="s-vsel"><option value="">Automatique</option>${voices.map((v) => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === st.voiceURI ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('')}</select></label></div>
           <button class="btn ghost sm" data-act="test-voice" style="justify-self:start">${I.sound} Tester la voix</button>`
           : '<div class="note">Ce navigateur ne propose pas de synthèse vocale : le coach parle par sous-titres.</div>'}
@@ -676,6 +714,7 @@
           case 'stop': stopSession(); break;
           case 'start-custom': startSession({ title: 'Ma séance', items: S.custom.map((x) => ({ ...x })) }); break;
           case 'ex-back': state.exDetail = null; render(); break;
+          case 'other-side': { const cur = E.ex; if (cur && !run) { E.setExercise(E.mirror(cur)); E.setMode('loop'); } break; }
           case 'try': { const ex = byId[state.exDetail]; startSession({ title: ex.name, items: [{ ex, sets: 1, n: ex.def.reps || ex.def.secs }], quick: true }); break; }
           case 'add-custom': { const ex = byId[state.exDetail]; S.custom.push({ id: ex.id, sets: ex.def.sets, n: ex.def.reps || ex.def.secs }); save(); render(); toast(`${ex.name} ajouté à ta séance.`); break; }
           case 'rm-custom': S.custom = S.custom.filter((c) => c.id !== state.exDetail); save(); render(); break;
@@ -706,6 +745,7 @@
       } else if (t.id === 's-voice') { S.settings.voice = t.checked; if (!t.checked) Voice.stop(); save(); renderControls(); }
       else if (t.id === 's-count') { S.settings.count = t.checked; save(); }
       else if (t.id === 's-cues') { S.settings.cues = t.checked; save(); }
+      else if (t.id === 's-warm') { S.settings.warm = t.checked; save(); }
       else if (t.id === 's-vsel') { S.settings.voiceURI = t.value; save(); Voice.pick(); }
     };
     v.oninput = (e) => {

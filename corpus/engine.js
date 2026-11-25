@@ -211,6 +211,9 @@
       mark('grip' + s, b['wr' + s], 0, -0.08, 0, 0);
     }
     mark('belly', b.spine, 0, 0.04, 0.02, 0.115);
+    mark('pubis', b.root, 0, -0.07, 0.06, 0.06);
+    mark('hipSideL', b.root, 0.15, -0.04, -0.01, 0.03);
+    mark('hipSideR', b.root, -0.15, -0.04, -0.01, 0.03);
     mark('chestF', b.chest, 0, 0.1, 0.05, 0.088);
     mark('headM', b.head, 0, 0.095, 0, 0.105);
 
@@ -345,7 +348,7 @@
   }
 
   const DEFAULT_CONTACTS = ['heelL', 'heelR', 'toeL', 'toeR', 'kneeL', 'kneeR', 'handL', 'handR', 'elbowL', 'elbowR',
-    'shoulderL', 'shoulderR', 'glutesL', 'glutesR', 'seatL', 'seatR', 'upperBackL', 'upperBackR', 'belly', 'chestF', 'headM'];
+    'shoulderL', 'shoulderR', 'glutesL', 'glutesR', 'hipSideL', 'hipSideR', 'pubis', 'seatL', 'seatR', 'upperBackL', 'upperBackR', 'belly', 'chestF', 'headM'];
 
   function meanOf(rig, names, out) {
     out.set(0, 0, 0);
@@ -377,10 +380,16 @@
         if (y < min) min = y;
       }
       r.position.y = (ex.groundY || 0) - min;
-      if (an) {
+      if (an && !an._skip) {
         const m = meanOf(rig, an.m, V());
-        const at = an.at || [0, 0, 0];
-        r.position.x = at[0] - m.x; r.position.z = at[2] - m.z;
+        const at = an._at || an.at || [0, 0, 0];
+        let x = at[0] - m.x, z = at[2] - m.z;
+        if (an.m2 && an._at2) {
+          const m2 = meanOf(rig, an.m2, V());
+          const w = clamp(P.aw || 0, 0, 1);
+          x += (an._at2[0] - m2.x - x) * w; z += (an._at2[2] - m2.z - z) * w;
+        }
+        r.position.x = x; r.position.z = z;
       }
     }
     r.updateMatrixWorld(true);
@@ -392,11 +401,35 @@
       if (fl) footFlat(rig, 'L', P.anL);
       if (fr) footFlat(rig, 'R', P.anR);
     }
+    if (plants && ex.reach) {
+      for (const limbName in ex.reach) {
+        const sp = ex.reach[limbName];
+        const tg = rig.markers[sp.m].getWorldPosition(V());
+        if (sp.off) tg.add(V(sp.off[0], sp.off[1], sp.off[2]));
+        ik(rig, limbName, tg, sp.pole);
+      }
+    }
     if (P.jy) { r.position.y += P.jy; r.updateMatrixWorld(true); }
     return P;
   }
 
+  // Ancrages automatiques : position naturelle des repères à la phase de référence.
+  function computeAnchors(rig, ex) {
+    const an = ex.anchor;
+    if (!an || an.mode === 'xyz' || !an.auto) return;
+    an._at = null; an._at2 = null; an._skip = true;
+    solve(rig, ex, an.t || 0, null);
+    const m = meanOf(rig, an.m, V());
+    an._at = [m.x, 0, m.z]; an._skip = false;
+    if (an.m2) {
+      solve(rig, ex, an.t2 || 0, null);
+      const m2 = meanOf(rig, an.m2, V());
+      an._at2 = [m2.x, 0, m2.z];
+    }
+  }
+
   function computePlants(rig, ex) {
+    computeAnchors(rig, ex);
     if (!ex.plant) return null;
     solve(rig, ex, ex.plantAt || 0, null);
     const out = {};
@@ -848,5 +881,38 @@
   E.debugSolve = (ex, t) => { compile(ex); E.setExercise(ex, { noBlend: true }); E.phase = t; E.mode = 'still'; };
   E.renderNow = () => renderer.render(scene, camera);
   E._dbg = () => ({ cam: camera.position.toArray().map(v=>+v.toFixed(2)), tgt: controls.target.toArray().map(v=>+v.toFixed(2)), goal: camOffsetGoal && camOffsetGoal.toArray().map(v=>+v.toFixed(2)), user: E.userOrbit, view: E.view, aspect: camera.aspect });
+  // Version miroir d'un exercice (côté gauche ↔ droit).
+  const NEG = ['rr', 'ry', 'spS', 'spT', 'nkS', 'nkT'];
+  const swapName = (n) => (typeof n === 'string' ? n.replace(/(L|R)$/, (c) => (c === 'L' ? 'R' : 'L')) : n);
+  function mirrorPose(P) {
+    if (!P) return P;
+    const o = {};
+    for (const k in P) {
+      let nk = k, v = P[k];
+      const base = k.slice(0, -1), last = k.slice(-1);
+      if ((last === 'L' || last === 'R') && SYM.includes(base)) nk = base + (last === 'L' ? 'R' : 'L');
+      if (NEG.includes(k)) v = -v;
+      o[nk] = v;
+    }
+    return o;
+  }
+  const swapKeys = (obj) => { if (!obj) return obj; const o = {}; for (const k in obj) o[swapName(k)] = obj[k]; return o; };
+  E.mirror = function (ex) {
+    if (ex._mirror) return ex._mirror;
+    const m = Object.assign({}, ex);
+    delete m._keys; delete m._plants;
+    m.id = ex.id + '~'; m.mirrored = !ex.mirrored;
+    m.base = mirrorPose(ex.base);
+    m.keys = ex.keys.map((k) => Object.assign(mirrorPose(k), { t: k.t }));
+    m.plant = swapKeys(ex.plant);
+    if (ex.reach) { m.reach = {}; for (const k in ex.reach) m.reach[swapName(k)] = Object.assign({}, ex.reach[k], { m: swapName(ex.reach[k].m) }); }
+    if (ex.anchor) m.anchor = Object.assign({}, ex.anchor, { m: ex.anchor.m.map(swapName), m2: ex.anchor.m2 && ex.anchor.m2.map(swapName), _at: null, _at2: null });
+    if (ex.contacts) m.contacts = ex.contacts.map(swapName);
+    if (ex.props) m.props = ex.props.map((p) => (typeof p === 'string' ? p : Object.assign({}, p, { at: swapName(p.at) })));
+    m.flatL = ex.flatR; m.flatR = ex.flatL;
+    if (ex.cam && ex.cam.az !== undefined && ex.cam.az % 180 !== 0) m.cam = Object.assign({}, ex.cam, { az: -ex.cam.az });
+    m._mirror = ex; ex._mirror = m;
+    return m;
+  };
   window.Corpus3D = E;
 })();
