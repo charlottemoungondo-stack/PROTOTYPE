@@ -62,6 +62,8 @@
 
   /* ---------- Voix ---------- */
   const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
+  // Dans l'application Android/iPhone (Capacitor), la voix passe par le moteur natif du téléphone.
+  const nativeTTS = () => { const C = window.Capacitor; return C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.TextToSpeech ? C.Plugins.TextToSpeech : null; };
   const FEMALE = /am[ée]lie|audrey|marie|c[ée]line|julie|hortense|denise|virginie|aur[ée]lie|elsa|brigitte|chantal|sylvie|google fran/i;
   const MALE = /thomas|nicolas|paul|henri|claude|daniel|antoine|jean|guillaume|mathieu|olivier|fabrice/i;
   const Voice = {
@@ -80,6 +82,13 @@
     say(text, opt = {}) {
       setCoachText(text);
       const wait = opt.wait !== false;
+      const tts = nativeTTS();
+      if (S.settings.voice && tts) {
+        const go = (opt.interrupt ? tts.stop().catch(() => {}) : Promise.resolve())
+          .then(() => { speaking(true); return tts.speak({ text, lang: 'fr-FR', rate: opt.rate || 1.0, pitch: S.settings.coach === 'f' ? 1.05 : 0.9, volume: 1, category: 'playback' }); })
+          .catch(() => {}).then(() => speaking(false));
+        return wait ? Promise.race([go, sleepPlain(1800 + text.length * 95)]) : Promise.resolve();
+      }
       if (!S.settings.voice || !synth) return wait ? sleepPlain(Math.min(5200, 600 + text.length * 48)) : Promise.resolve();
       if (opt.interrupt) synth.cancel();
       const u = new SpeechSynthesisUtterance(text.replace(/\s*!\s*/g, ' ! '));
@@ -94,7 +103,7 @@
         if (!wait) res();
       });
     },
-    stop() { if (synth) synth.cancel(); speaking(false); },
+    stop() { if (synth) synth.cancel(); const t = nativeTTS(); if (t) t.stop().catch(() => {}); speaking(false); },
   };
   /* ---------- Avatar réaliste importé (.glb) ---------- */
   const IDB = {
@@ -838,10 +847,10 @@
         <label class="toggle">Échauffement et étirements automatiques<input type="checkbox" id="s-warm" ${st.warm ? 'checked' : ''}></label>
         <label class="toggle">Commandes vocales pendant la séance<input type="checkbox" id="s-listen" ${st.listen ? 'checked' : ''}></label>
         <div class="note">Dis « pause », « reprends », « suivant », « répète » ou « stop ». Le micro ne s'active que pendant une séance.${Listen.supported ? '' : ' Ce navigateur ne propose pas la reconnaissance vocale : essaie Chrome, Edge ou Safari.'}</div>
-        ${synth ? `<div class="form" style="grid-template-columns:1fr"><label>Voix<select id="s-vsel"><option value="">Automatique</option>${voices.map((v) => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === st.voiceURI ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('')}</select></label></div>
+        ${synth && !nativeTTS() ? `<div class="form" style="grid-template-columns:1fr"><label>Voix<select id="s-vsel"><option value="">Automatique</option>${voices.map((v) => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === st.voiceURI ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('')}</select></label></div>
           <button class="btn ghost sm" data-act="test-voice" style="justify-self:start">${I.sound} Tester la voix</button>`
-          : '<div class="note">Ce navigateur ne propose pas de synthèse vocale : le coach parle par sous-titres.</div>'}
-        ${synth && !voices.length ? '<div class="note">Aucune voix française trouvée sur cet appareil. Installe une voix française dans les réglages du système pour un meilleur rendu.</div>' : ''}
+          : nativeTTS() ? `<button class="btn ghost sm" data-act="test-voice" style="justify-self:start">${I.sound} Tester la voix</button>` : '<div class="note">Ce navigateur ne propose pas de synthèse vocale : le coach parle par sous-titres.</div>'}
+        ${synth && !nativeTTS() && !voices.length ? '<div class="note">Aucune voix française trouvée sur cet appareil. Installe une voix française dans les réglages du système pour un meilleur rendu.</div>' : ''}
       </div>
       <div class="setting"><span>Rythme des répétitions</span><div class="seg" role="group">${Object.keys(TEMPO).map((k) => `<button data-set="tempo" data-v="${k}" aria-pressed="${st.tempo === k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div></div>
       <div class="setting"><span>Repos entre les séries</span><div class="seg" role="group">${[20, 30, 45, 60, 90].map((k) => `<button data-set="rest" data-v="${k}" aria-pressed="${st.rest === k}">${k} s</button>`).join('')}</div></div>

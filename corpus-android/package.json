@@ -1,0 +1,16 @@
+{
+  "name": "corpus-coach",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Application Android et iPhone de Corpus Coach (Capacitor)",
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor-community/text-to-speech": "^6.0.0",
+    "three": "0.147.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  }
+}

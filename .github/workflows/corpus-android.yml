@@ -1,0 +1,35 @@
+name: Corpus Coach - APK Android
+
+on:
+  push:
+    branches: [claude/eloquent-mccarthy-febxvh]
+    paths: ['corpus/**', 'corpus-android/**', '.github/workflows/corpus-android.yml']
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Préparer le projet
+        working-directory: corpus-android
+        run: |
+          npm install --no-audit --no-fund --legacy-peer-deps
+          ./prepare-www.sh
+          npx cap add android
+          npx cap sync android
+      - name: Compiler l'APK
+        working-directory: corpus-android/android
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corpus-coach-android
+          path: corpus-android/android/app/build/outputs/apk/debug/app-debug.apk
