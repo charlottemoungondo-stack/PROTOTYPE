@@ -159,7 +159,7 @@
     try {
       if (!realCache[sex]) {
         $('#loading').hidden = false; $('#loading').textContent = `Arrivée de ${coach().name}…`;
-        const obj = await E.loadFBXAvatar(await loadAvatarData(sex), 'avatars/');
+        const obj = await E.loadFBXAvatar(await loadAvatarData(sex), 'avatars/', { athletic: true, sex, tieHair: sex === 'f' });
         realCache[sex] = E.prepareModel(obj);
         realCache[sex].builtin = true;
       }

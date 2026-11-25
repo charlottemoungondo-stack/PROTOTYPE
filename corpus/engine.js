@@ -982,7 +982,7 @@
       }
       for (const d of dynProps) d.update && d.update();
       updateTail(dt);
-      if (E.custom) { retarget(); animateFace(E.custom); animateFingers(E.custom); }
+      if (E.custom) { retarget(); animateFace(E.custom); animateFingers(E.custom); E.custom.scene.updateMatrixWorld(true); updateCustomTail(E.custom, dt); }
       // caméra « tournage » : change d'angle en douceur pendant les séries
       if (E.mode === 'work' && E.autoCut && !E.userOrbit) {
         const now = performance.now();
@@ -1121,7 +1121,7 @@
     }
   }
   // Charge un personnage FBX (ex. Microsoft Rocketbox) et ses textures web.
-  E.loadFBXAvatar = function (url, texDir) {
+  E.loadFBXAvatar = function (url, texDir, opts) {
     return new Promise((res, rej) => {
       if (!THREE.FBXLoader) return rej(new Error('Chargeur FBX indisponible.'));
       const mgr = new THREE.LoadingManager();
@@ -1149,10 +1149,11 @@
           o.material = Array.isArray(o.material) ? mats : mats[0];
           o.castShadow = true; o.receiveShadow = true;
         });
+        if (opts && opts.athletic) athletify(obj, opts.sex, opts.tieHair);
         res(obj);
       };
       const ld = new THREE.FBXLoader(mgr);
-      if (url instanceof ArrayBuffer) { try { onObj(ld.parse(url, texDir)); } catch (err) { rej(new Error('Impossible de lire le personnage.')); } }
+      if (url instanceof ArrayBuffer) { try { onObj(ld.parse(url, texDir)); } catch (err) { console.warn('FBX', err); rej(new Error('Impossible de lire le personnage.')); } }
       else ld.load(url, onObj, undefined, () => rej(new Error('Impossible de charger le personnage.')));
     });
   };
@@ -1214,11 +1215,140 @@
     prepared.face = (jaw || lidsTop.length) ? { jaw, jawRest: jaw ? jaw.quaternion.clone() : null, jawAxis: V(0, 0, 1), lidsTop } : null;
   }
 
+  // Silhouette athlétique : la peau (et les vêtements près du corps) est gonflée par zone musculaire,
+  // la taille affinée ; pour une coach, les mèches qui tombent sous les oreilles sont retirées (cheveux attachés).
+  function boneCat(n) {
+    n = norm(n);
+    if (/upperarm|^(left|right)arm$|^[lr]arm$/.test(n)) return 'upperarm';
+    if (/forearm|lowerarm/.test(n)) return 'forearm';
+    if (/clavicle|shoulder/.test(n)) return 'clavicle';
+    if (/thigh|upleg|upperleg/.test(n)) return 'thigh';
+    if (/calf|lowerleg|^(left|right)leg$|^[lr]leg$/.test(n)) return 'calf';
+    if (/spine2|upperchest|spine03/.test(n)) return 'chest';
+    if (/^spine1?$|spine01|spine02|waist/.test(n)) return 'waist';
+    if (/pelvis|hips?$/.test(n)) return 'pelvis';
+    if (/neck/.test(n)) return 'neck';
+    return '';
+  }
+  function athletify(obj, sex, tieHair) {
+    obj.updateMatrixWorld(true);
+    const m = sex === 'm';
+    const A = m
+      ? { upperarm: 0.0115, forearm: 0.0065, clavicle: 0.009, thigh: 0.008, calf: 0.0065, neck: 0.004, chestF: 0.009, chestB: 0.006, waist: 0, glutes: 0.004 }
+      : { upperarm: 0.0055, forearm: 0.003, clavicle: 0.004, thigh: 0.0055, calf: 0.0045, neck: 0, chestF: 0.002, chestB: 0.002, waist: -0.004, glutes: 0.009 };
+    obj.traverse((o) => {
+      if (!o.isSkinnedMesh) return;
+      const g = o.geometry, pos = g.attributes.position, nor = g.attributes.normal, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+      const cats = o.skeleton.bones.map((b) => boneCat(b.name));
+      const M = o.bindMatrix, NM = new THREE.Matrix3().getNormalMatrix(M);
+      const MI = M.clone().invert();
+      let minY = Infinity, maxY = -Infinity;
+      const wp = V(), wn = V();
+      for (let i = 0; i < pos.count; i++) { wp.fromBufferAttribute(pos, i).applyMatrix4(M); if (wp.y < minY) minY = wp.y; if (wp.y > maxY) maxY = wp.y; }
+      const H = maxY - minY;
+      for (let i = 0; i < pos.count; i++) {
+        wn.fromBufferAttribute(nor, i).applyMatrix3(NM).normalize();
+        let d = 0;
+        for (let k = 0; k < 4; k++) {
+          const w = sw.array[i * sw.itemSize + k]; if (!w) continue;
+          const c = cats[si.array[i * si.itemSize + k]];
+          if (c === 'chest') d += w * (wn.z > 0.2 ? A.chestF : wn.z < -0.2 ? A.chestB : (A.chestF + A.chestB) / 2);
+          else if (c === 'pelvis') d += w * (wn.z < -0.25 ? A.glutes : 0);
+          else if (c === 'waist') d += w * (Math.abs(wn.x) > 0.55 ? A.waist : 0);
+          else if (c === 'upperarm') d += w * A.upperarm * (wn.z > 0.3 ? 1.25 : 1);
+          else if (A[c]) d += w * A[c];
+        }
+        if (d) {
+          wp.fromBufferAttribute(pos, i).applyMatrix4(M).addScaledVector(wn, d * H).applyMatrix4(MI);
+          pos.setXYZ(i, wp.x, wp.y, wp.z);
+        }
+      }
+      pos.needsUpdate = true;
+      // cheveux attachés : on retire les mèches qui descendent sous les oreilles
+      if (tieHair && Array.isArray(o.material) && g.index) {
+        const hi = o.material.findIndex((mt) => /opacity|hair/i.test(mt.name));
+        if (hi >= 0) {
+          const cut = maxY - 0.125 * H;
+          const idx = g.index.array, keep = [];
+          const groups = g.groups.map((gr) => ({ ...gr }));
+          let newIdx = [];
+          for (const gr of groups) {
+            const start = newIdx.length;
+            for (let t = gr.start; t < gr.start + gr.count; t += 3) {
+              if (gr.materialIndex === hi) {
+                let top = -Infinity;
+                for (let q = 0; q < 3; q++) { wp.fromBufferAttribute(pos, idx[t + q]).applyMatrix4(M); if (wp.y > top) top = wp.y; }
+                if (top < cut) continue;
+              }
+              newIdx.push(idx[t], idx[t + 1], idx[t + 2]);
+            }
+            keep.push({ start, count: newIdx.length - start, materialIndex: gr.materialIndex });
+          }
+          g.setIndex(newIdx); g.clearGroups(); for (const k of keep) g.addGroup(k.start, k.count, k.materialIndex);
+        }
+      }
+    });
+    obj.userData.tiedHair = !!tieHair;
+    if (window.CORPUS_CUT_UV) cutUV(obj, window.CORPUS_CUT_UV);
+  }
+  function cutUV(obj, rects) {
+    obj.traverse((o) => {
+      if (!o.isSkinnedMesh || !o.geometry.index || !o.geometry.attributes.uv) return;
+      const g = o.geometry, uv = g.attributes.uv, idx = g.index.array;
+      const mi = Array.isArray(o.material) ? o.material.findIndex((mt) => /body/i.test(mt.name)) : 0;
+      const inC = (a2, b2, c2) => { const u = (uv.getX(a2) + uv.getX(b2) + uv.getX(c2)) / 3, v = 1 - (uv.getY(a2) + uv.getY(b2) + uv.getY(c2)) / 3; return rects.some(([x0, y0, x1, y1]) => u >= x0 && u <= x1 && v >= y0 && v <= y1); };
+      const out = [], groups = [];
+      for (const gr of g.groups) {
+        const st = out.length;
+        for (let t = gr.start; t < gr.start + gr.count; t += 3) {
+          if (gr.materialIndex === mi && inC(idx[t], idx[t + 1], idx[t + 2])) continue;
+          out.push(idx[t], idx[t + 1], idx[t + 2]);
+        }
+        groups.push({ start: st, count: out.length - st, materialIndex: gr.materialIndex });
+      }
+      g.setIndex(out); g.clearGroups(); for (const k of groups) g.addGroup(k.start, k.count, k.materialIndex);
+    });
+  }
+  // Queue de cheval qui suit les mouvements de la tête
+  function addPonytail(prepared) {
+    const head = prepared.B.head; if (!head) return;
+    const mat = new THREE.MeshPhysicalMaterial({ color: prepared.hairColor || 0x1c1410, roughness: 0.5, sheen: 1, sheenRoughness: 0.35, sheenColor: new THREE.Color(0x6b5040) });
+    const g = new THREE.Group();
+    const L = 0.27;
+    const mesh = limb(L, [[0, 0.026], [0.08, 0.034], [0.35, 0.03], [0.75, 0.018], [1, 0.004]], mat);
+    mesh.castShadow = true; g.add(mesh);
+    const tie = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.006, 8, 20), new THREE.MeshStandardMaterial({ color: 0x14a79a, roughness: 0.5 }));
+    tie.rotation.x = Math.PI / 2; g.add(tie);
+    const bun = ellipsoid(mat, 0.032, 0.026, 0.03, 0, 0.012, 0); g.add(bun);
+    // point d'attache : arrière-haut du crâne, mesuré au repos
+    const hp = wpos(head);
+    const anchorW = hp.clone().add(V(0, 0.085, -0.075));
+    prepared.tail = { group: g, head, anchorLocal: head.worldToLocal(anchorW.clone()), len: L, p: null, prev: null };
+  }
+  function updateCustomTail(C, dt) {
+    const t = C.tail; if (!t) return;
+    const A = t.head.localToWorld(t.anchorLocal.clone());
+    const hq = t.head.getWorldQuaternion(new THREE.Quaternion());
+    const back = V(0, -0.93, -0.36).applyQuaternion(C.headRestInv ? hq.clone().multiply(C.headRestInv) : hq).normalize();
+    if (!t.p) { t.p = A.clone().addScaledVector(back, t.len); t.prev = t.p.clone(); }
+    const vel = V().subVectors(t.p, t.prev).multiplyScalar(0.9);
+    t.prev.copy(t.p);
+    const h = Math.min(dt, 1 / 30);
+    t.p.add(vel).add(V(0, -9.8 * h * h * 1.2, 0));
+    t.p.lerp(A.clone().addScaledVector(back, t.len).add(V(0, -0.05, 0)), 0.12);
+    const d = V().subVectors(t.p, A); t.p.copy(A).addScaledVector(d, t.len / (d.length() || 1));
+    if (t.p.y < 0.02) t.p.y = 0.02;
+    t.group.position.copy(A);
+    t.group.quaternion.setFromUnitVectors(V(0, -1, 0), V().subVectors(t.p, A).normalize());
+  }
+
   E.useModel = function (prepared) {
-    setupFace(prepared); if (!prepared.fingers) setupFingers(prepared);
+    setupFace(prepared);
+    if (prepared.scene.userData.tiedHair && !prepared.tail) { addPonytail(prepared); prepared.headRestInv = prepared.rest.head ? prepared.rest.head.clone().invert() : null; } if (!prepared.fingers) setupFingers(prepared);
     E.clearModel(true);
     E.custom = prepared;
     avatarHolder.add(prepared.scene);
+    if (prepared.tail) scene.add(prepared.tail.group);
     prepared.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
     prepared.rigRootRest = V(0, -prepared.dims.hipY + prepared.dims.TH + prepared.dims.SH + prepared.dims.ankleH, 0);
     E.setAvatar(Object.assign({}, E.lastCfg, { dims: prepared.dims }));
@@ -1226,6 +1356,7 @@
   E.clearModel = function (keep) {
     if (!E.custom) return;
     avatarHolder.remove(E.custom.scene);
+    if (E.custom.tail) scene.remove(E.custom.tail.group);
     E.custom = null;
     if (!keep) { E.setAvatar(Object.assign({}, E.lastCfg, { dims: null })); }
   };
