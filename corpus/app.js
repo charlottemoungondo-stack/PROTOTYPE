@@ -42,7 +42,7 @@
   const S = Object.assign(JSON.parse(JSON.stringify(DEFAULTS)), load(KEY, {}));
   S.settings = Object.assign({}, DEFAULTS.settings, S.settings || {});
   let PHOTOS = load(PKEY, []);
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* stockage indisponible */ } }
+  function save() { S.savedAt = new Date().toISOString(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* stockage indisponible */ } if (window.CorpusCloud && window.CorpusCloud.user) window.CorpusCloud.schedulePush(); }
   function savePhotos() { try { localStorage.setItem(PKEY, JSON.stringify(PHOTOS)); return true; } catch (e) { return false; } }
 
   const SKINS = ['#f3d2bb', '#e3b48f', '#c99673', '#a8714e', '#7d4e33', '#553424'];
@@ -826,7 +826,15 @@
   function viewReglages() {
     const st = S.settings;
     const voices = Voice.list;
-    return `<div class="card"><div class="row"><div class="grow"><h3>Mon profil</h3><div class="note">${S.profile ? esc((GOALS.find((g) => g[0] === S.profile.goal) || [, ''])[1]) + ' · ' + S.profile.freq + ' séances par semaine' : 'Pas encore créé'}</div></div><button class="btn ghost sm" data-act="edit-profile">Modifier</button></div></div>
+    const C = window.CorpusCloud;
+    const account = !C || !C.enabled ? '' : C.user
+      ? `<div class="card"><div class="row"><div class="grow"><h3>Mon compte</h3><div class="note">${esc(C.user.email || '')} · ${esc(C.status || 'Connecté')}</div></div><button class="btn ghost sm" data-act="cloud-out">Se déconnecter</button></div></div>`
+      : `<div class="card"><h3>Mon compte</h3><p class="note">Connecte-toi pour retrouver tes séances, défis et mesures sur tous tes appareils. Tu reçois un code par e-mail, sans mot de passe.</p>
+          <div class="form" style="grid-template-columns:1fr"><label>E-mail<input type="email" id="cl-email" autocomplete="email" value="${esc(state.clEmail || '')}"></label>
+          ${state.clSent ? '<label>Code reçu par e-mail<input id="cl-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8"></label>' : ''}</div>
+          ${state.clErr ? `<div class="safety">${esc(state.clErr)}</div>` : ''}
+          <button class="btn accent sm" data-act="${state.clSent ? 'cloud-verify' : 'cloud-send'}" style="justify-self:start">${state.clSent ? 'Valider le code' : 'Recevoir un code'}</button></div>`;
+    return `${account}<div class="card"><div class="row"><div class="grow"><h3>Mon profil</h3><div class="note">${S.profile ? esc((GOALS.find((g) => g[0] === S.profile.goal) || [, ''])[1]) + ' · ' + S.profile.freq + ' séances par semaine' : 'Pas encore créé'}</div></div><button class="btn ghost sm" data-act="edit-profile">Modifier</button></div></div>
       <div><h2>Ton coach</h2><p class="lead">Choisis la personne qui t'accompagne, son apparence et sa voix.</p></div>
       <div class="setting"><span>Coach</span><div class="seg" role="group">
         <button data-set="coach" data-v="f" aria-pressed="${st.coach === 'f'}">Léa</button><button data-set="coach" data-v="m" aria-pressed="${st.coach === 'm'}">Malik</button></div></div>
@@ -920,6 +928,9 @@
           case 'cancel-profile': state.editProfile = false; state.draft = null; render(); break;
           case 'edit-profile': state.editProfile = true; state.draft = Object.assign({}, S.profile); state.tab = 'accueil'; render(); break;
           case 'tip-back': state.tip = null; render(); break;
+          case 'cloud-send': { const em = ($('#cl-email').value || '').trim(); state.clEmail = em; state.clErr = null; if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { state.clErr = 'Adresse e-mail invalide.'; render(); break; } try { await window.CorpusCloud.sendCode(em); state.clSent = true; toast('Code envoyé. Regarde ta boîte mail.'); } catch (err) { state.clErr = err.message; } render(); break; }
+          case 'cloud-verify': { try { await window.CorpusCloud.verify(state.clEmail, ($('#cl-code').value || '').trim()); state.clSent = false; state.clErr = null; toast('Connecté. Tes données sont sauvegardées en ligne.'); } catch (err) { state.clErr = err.message; } render(); break; }
+          case 'cloud-out': await window.CorpusCloud.signOut(); toast('Déconnecté.'); render(); break;
           case 'clear-model': E.clearModel(); modelState.name = null; IDB.del('avatar'); render(); toast('Avatar intégré rétabli.'); break;
           case 'start-custom': startSession({ title: 'Ma séance', items: S.custom.map((x) => ({ ...x })) }); break;
           case 'ex-back': state.exDetail = null; render(); break;
@@ -1010,6 +1021,11 @@
     setCoachText(`Salut, c'est ${coach().name} ! Choisis une séance, ou touche un exercice pour le voir en 3D.`);
     Voice.init();
     if (window.indexedDB) restoreModel();
+    const C = window.CorpusCloud;
+    if (C && C.enabled) {
+      C.onChange(() => { if (state.tab === 'reglages' || state.tab === 'accueil') render(); });
+      C.init(() => JSON.parse(JSON.stringify(S)), (st) => { Object.assign(S, st); S.settings = Object.assign({}, DEFAULTS.settings, S.settings || {}); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* rien */ } render(); }).catch(() => {});
+    }
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const re = () => setTimeout(() => E.applyTheme && E.applyTheme(), 30);
     mq.addEventListener && mq.addEventListener('change', re);
