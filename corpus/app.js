@@ -255,6 +255,15 @@
     }
     return mistakeCache[ex.id];
   }
+  // Photos des coachs (une par exercice illustré) : coachs/<lea|malik>/<ordre>-<exercice>.jpg
+  const PHOTO_EX = ['squat', 'fente', 'planche', 'pompes', 'mountain-climbers', 'jumping-jacks', 'burpees', 'pont-fessier', 'crunch', 'dead-bug'];
+  const photoFor = (id) => { const i = PHOTO_EX.indexOf(String(id).replace(/[~!]$/, '')); return i < 0 ? null : `coachs/${S.settings.coach === 'm' ? 'malik' : 'lea'}/${String(i + 1).padStart(2, '0')}-${PHOTO_EX[i]}.jpg`; };
+  function showInset(ex) {
+    const el = $('#photo-inset'); if (!el) return;
+    const src = ex && photoFor(ex.id);
+    if (!src) { el.hidden = true; return; }
+    el.querySelector('img').src = src; el.querySelector('img').alt = `${coach().name} : ${ex.name}`; el.hidden = false;
+  }
   const warnPill = (txt) => `<div class="warn-pill">À éviter · ${esc(txt)}</div>`;
 
   /* ---------- État de l'interface ---------- */
@@ -306,6 +315,7 @@
   function preview(ex, say) {
     state.previewEx = ex;
     if (run) return;
+    showInset(ex);
     E.setExercise(ex); E.setMode('loop'); E.setSpeed(tempo() * 0.9);
     setViewButtons('');
     const d = ex.def;
@@ -421,6 +431,7 @@
             await sayR(r, `Attention : ${co.errors[0].charAt(0).toLowerCase() + co.errors[0].slice(1)}`);
           }
         }
+        showInset(ex);
         const sides = ex.sided ? [ex, E.mirror(ex)] : [ex];
         for (let set = 1; set <= it.sets && !r.skip; set++) {
           r.set = set; updateStrip(r);
@@ -804,7 +815,7 @@
     const f = d.sex === 'f';
     let body = '';
     switch (step) {
-      case 'bienvenue': body = `<h2>Bienvenue sur Corpus</h2><p class="lead">Avant de t'entraîner, ton coach fait ton bilan : ton objectif, les zones que tu veux travailler, ton niveau, ton temps et ta santé. Ça prend deux minutes, et ton programme sera fait pour toi.</p>
+      case 'bienvenue': body = `<div class="coach-pick">${[['f', 'Léa'], ['m', 'Malik']].map(([k, n]) => `<figure class="coach-card"><img src="${portrait(k)}" alt="Coach ${n}"><b>${n}</b></figure>`).join('')}</div><h2>Bienvenue sur Corpus</h2><p class="lead">Avant de t'entraîner, ton coach fait ton bilan : ton objectif, les zones que tu veux travailler, ton niveau, ton temps et ta santé. Ça prend deux minutes, et ton programme sera fait pour toi.</p>
         <div class="form" style="grid-template-columns:1fr"><label>Ton prénom<input id="wz-name" value="${esc(d.name || '')}" autocomplete="given-name" placeholder="Ex. Charlotte" maxlength="30"></label></div>
         <p class="note">L'application est gratuite. Tes réponses restent sur ton appareil.</p>`; break;
       case 'sexe': body = `<h2>Tu es…</h2><p class="lead">Les programmes et les conseils s'adaptent à ta morphologie.</p>${wizChips('sex', [['f', 'Une femme'], ['m', 'Un homme']])}`; break;
@@ -956,6 +967,7 @@
     const d = ex.def;
     return `<button class="back" data-act="ex-back">${I.back} Tous les exercices</button>
       <div><h2>${esc(ex.name)}</h2><div class="chips" style="margin-top:8px">${ex.zones.map((z) => `<span class="tag acc">${zoneLabel[z]}</span>`).join('')}</div></div>
+      ${photoFor(ex.id) ? `<figure class="coach-photo"><img src="${photoFor(ex.id)}" alt="${esc(coach().name)} : ${esc(ex.name)}" loading="lazy" onerror="this.closest('figure').hidden=true"><figcaption>${esc(coach().name)} montre le geste</figcaption></figure>` : ''}
       <dl class="kv"><dt>Matériel</dt><dd>${esc(equipText(ex))}</dd><dt>Lieu</dt><dd>${ex.place.map((p) => p === 'salle' ? 'Salle' : 'Maison').join(' et ')}</dd>
         <dt>Volume conseillé</dt><dd>${d.sets} × ${d.reps ? d.reps + ' répétitions' : d.secs + ' secondes'}</dd><dt>Niveau</dt><dd>${['', 'Débutant', 'Intermédiaire', 'Avancé'][ex.level]}</dd></dl>
       <div class="card"><h3>Exécution</h3><ol class="steps">${ex.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>
@@ -1137,8 +1149,8 @@
           <button class="btn accent sm" data-act="${state.clSent ? 'cloud-verify' : 'cloud-send'}" style="justify-self:start">${state.clSent ? 'Valider le code' : 'Recevoir un code'}</button></div>`;
     return `${account}<div class="card"><div class="row"><div class="grow"><h3>Mon profil</h3><div class="note">${S.profile ? esc((GOALS.find((g) => g[0] === S.profile.goal) || [, ''])[1]) + ' · ' + S.profile.freq + ' séances par semaine' : 'Pas encore créé'}</div></div><button class="btn ghost sm" data-act="edit-profile">Modifier</button></div></div>
       <div><h2>Ton coach</h2><p class="lead">Choisis la personne qui t'accompagne, son apparence et sa voix.</p></div>
-      <div class="setting"><span>Coach</span><div class="seg" role="group">
-        <button data-set="coach" data-v="f" aria-pressed="${st.coach === 'f'}">Léa</button><button data-set="coach" data-v="m" aria-pressed="${st.coach === 'm'}">Malik</button></div></div>
+      <div class="setting"><span>Coach</span><div class="coach-pick">
+        ${[['f', 'Léa'], ['m', 'Malik']].map(([k, n]) => `<button class="coach-card" data-set="coach" data-v="${k}" aria-pressed="${st.coach === k}"><img src="${portrait(k)}" alt="Coach ${n}" loading="lazy"><b>${n}</b></button>`).join('')}</div></div>
       <label class="toggle card">Coach réaliste (personnage humain photographié)<input type="checkbox" id="s-real" ${st.realistic ? 'checked' : ''}></label>
       <div class="card"><h3>Importer ton propre avatar (bêta)</h3>
         <p class="note">Importe un personnage 3D humain au format .glb avec un squelette standard (Mixamo, Character Creator, MakeHuman, Unity/VRM). Le coach reprend tous ses mouvements avec ce corps. Le fichier reste sur cet appareil.</p>
@@ -1327,8 +1339,13 @@
     });
   }
 
+  const portrait = (sex, mini) => `coachs/${sex === 'm' ? 'malik' : 'lea'}/00-portrait${mini ? '-mini' : ''}.jpg`;
   function updateCoachUi() {
     const c = coach();
+    for (const id of ['#coach-initial', '#coach-badge']) {
+      const el = $(id); if (!el) continue;
+      el.style.backgroundImage = `url(${portrait(S.settings.coach, true)})`; el.classList.add('has-photo');
+    }
     $('#coach-initial').textContent = c.initial; $('#coach-badge').textContent = c.initial; $('#coach-name').textContent = 'Coach ' + c.name;
   }
   function setPlace(p) {

@@ -72,6 +72,18 @@ button { cursor: pointer; }
 .big-overlay .n { font-family: var(--f-display); font-stretch: 125%; font-weight: 900; font-size: clamp(90px, 16vw, 180px); line-height: .9; color: var(--ink); text-shadow: 0 2px 30px var(--stage); }
 .big-overlay .lbl { font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: 13px; color: var(--muted); }
 .big-overlay .next { margin-top: 8px; font-size: 15px; font-weight: 600; }
+.photo-inset { position: absolute; right: 14px; top: 70px; width: clamp(96px, 14vw, 170px); margin: 0; border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow); background: var(--surface); pointer-events: none; }
+.photo-inset img { display: block; width: 100%; aspect-ratio: 3/4; object-fit: cover; }
+.coach-photo { margin: 0; border-radius: var(--r); overflow: hidden; background: var(--surface); border: 1px solid var(--line); }
+.coach-photo img { display: block; width: 100%; max-height: 420px; object-fit: contain; background: #e9e7e4; }
+.coach-photo figcaption { padding: 8px 12px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+@media (max-width: 520px) { .photo-inset { top: 96px; right: 10px; } }
+.has-photo { background-size: cover; background-position: 50% 12%; color: transparent !important; }
+.coach-pick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.coach-card { margin: 0; padding: 0; border: 2px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--surface); text-align: center; }
+.coach-card img { display: block; width: 100%; aspect-ratio: 3/4; object-fit: cover; object-position: 50% 0; background: #e9e7e4; }
+.coach-card b { display: block; padding: 8px; font-family: var(--f-display); font-stretch: 110%; }
+.coach-card[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .warn-pill { display: inline-block; background: #d93b2b; color: #fff; font-weight: 800; letter-spacing: .02em; padding: 10px 16px; border-radius: 999px; font-size: 15px; box-shadow: var(--shadow); }
 .hud-bottom { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: end; gap: 12px; }
 .counter { position: relative; width: 132px; height: 132px; background: var(--hud); backdrop-filter: blur(10px); border-radius: 50%; box-shadow: var(--shadow); display: grid; place-items: center; }
@@ -253,7 +265,7 @@ button { cursor: pointer; }
             <button data-view="back" aria-pressed="false">Dos</button>
           </div>
         </div>
-        <div class="hud-mid"><div class="big-overlay" id="overlay" hidden></div></div>
+        <div class="hud-mid"><div class="big-overlay" id="overlay" hidden></div><figure class="photo-inset" id="photo-inset" hidden><img alt="" onerror="this.closest('figure').hidden=true"></figure></div>
         <div class="hud-bottom">
           <div class="counter" id="counter" hidden>
             <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="46" fill="none" stroke-width="5"/><circle class="bar" id="ring" cx="50" cy="50" r="46" fill="none" stroke-width="5" stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="289"/></svg>
