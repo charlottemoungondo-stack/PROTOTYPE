@@ -206,6 +206,22 @@
   function setCoachText(t) { $('#coach-text').textContent = t; }
   const sleepPlain = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  /* ---------- Coaching : erreurs, variantes, tempo ---------- */
+  const CO = (window.CorpusCoaching && window.CorpusCoaching.C) || {};
+  const HYPE = (window.CorpusCoaching && window.CorpusCoaching.HYPE) || ['Allez !'];
+  const FIRST_REP = (window.CorpusCoaching && window.CorpusCoaching.FIRST_REP) || {};
+  const mistakeCache = {};
+  function mistakeEx(ex) {
+    const m = CO[ex.id] && CO[ex.id].mistake; if (!m) return null;
+    if (!mistakeCache[ex.id]) {
+      const mx = Object.assign({}, ex, { id: ex.id + '!', keys: m.keys, base: m.base || ex.base });
+      delete mx._keys; delete mx._plants; delete mx._mirror;
+      mistakeCache[ex.id] = mx;
+    }
+    return mistakeCache[ex.id];
+  }
+  const warnPill = (txt) => `<div class="warn-pill">À éviter · ${esc(txt)}</div>`;
+
   /* ---------- État de l'interface ---------- */
   const state = { tab: 'accueil', tip: null, editProfile: false, exQuery: '', exZones: new Set(), exDetail: null, selPhotos: [], confirm: null, previewEx: byId.squat };
   let run = null;
@@ -331,7 +347,7 @@
       const mobility = plan.items.every((it) => it.ex.stretch || it.ex.zones.includes('cou') || it.ex.aud.includes('mobilite'));
       if (!mobility) plan.items = [...warmItems(), ...plan.items, ...coolItems(plan.items)];
     }
-    const r = run = { plan, paused: false, skip: false, skipRest: false, stop: false, t0: Date.now(), pausedMs: 0, reps: 0, idx: 0, set: 1, phase: 'intro', done: [],
+    const r = run = { seenMistake: {}, plan, paused: false, skip: false, skipRest: false, stop: false, t0: Date.now(), pausedMs: 0, reps: 0, idx: 0, set: 1, phase: 'intro', done: [],
       warmN: plan.items.filter((x) => x.phase === 'warm').length, mainN: plan.items.filter((x) => !x.phase).length };
     if (navigator.wakeLock) navigator.wakeLock.request('screen').then((l) => { r.lock = l; }).catch(() => {});
     buildStrip(plan); renderControls(); if (state.tab !== 'accueil') state.tab = 'seances'; render(); updateStrip(r); Listen.sync();
@@ -356,7 +372,19 @@
         if (it.phase === 'warm' && i === 0) await sayR(r, 'On commence par s\'échauffer, tranquillement.');
         if (it.phase === 'cool' && (i === 0 || !plan.items[i - 1].phase)) await sayR(r, 'Bravo, le plus dur est fait ! On s\'étire pour bien récupérer.');
         if (it.phase) await sayR(r, `${ex.name}, ${amount}${perSide}. ${ex.steps[0]}`);
-        else await sayR(r, `${ex.name}. ${it.sets > 1 ? it.sets + ' séries de ' : ''}${amount}${perSide}. ${ex.steps[0]} ${ex.steps[1] || ''}`);
+        else {
+          await sayR(r, `${ex.name}. ${it.sets > 1 ? it.sets + ' séries de ' : ''}${amount}${perSide}. ${ex.steps[0]} ${ex.steps[1] || ''}`);
+          const co = CO[ex.id], mx = mistakeEx(ex);
+          if (mx && !r.seenMistake[ex.id]) {
+            r.seenMistake[ex.id] = true;
+            E.setExercise(mx); E.setMode('loop'); E.setSpeed(0.7 * tempo()); overlay(warnPill(co.mistake.label));
+            await sayR(r, `Regarde bien l'erreur à éviter : ${co.mistake.label.toLowerCase()}.`);
+            overlay(null); E.setExercise(ex); E.setMode('loop');
+            await sayR(r, `Et voici le bon geste. ${co.errors && co.errors[1] ? 'Attention aussi : ' + co.errors[1].charAt(0).toLowerCase() + co.errors[1].slice(1) : ''}`);
+          } else if (co && co.errors && co.errors[0]) {
+            await sayR(r, `Attention : ${co.errors[0].charAt(0).toLowerCase() + co.errors[0].slice(1)}`);
+          }
+        }
         const sides = ex.sided ? [ex, E.mirror(ex)] : [ex];
         for (let set = 1; set <= it.sets && !r.skip; set++) {
           r.set = set; updateStrip(r);
@@ -409,6 +437,9 @@
       $('#counter').hidden = false; setCount(0, n);
       E.phase = Math.round(E.phase); E.setSpeed(tempo()); E.setMode('work');
       const cueAt = n >= 6 ? Math.ceil(n / 2) : -1;
+      const hypeAt = n >= 10 ? Math.round(n * 0.75) : -1;
+      const tp = CO[ex.id.replace(/[~!]$/, '')] && CO[ex.id.replace(/[~!]$/, '')].tempo;
+      if (tp && FIRST_REP[tp] && r.set === 1 && S.settings.cues) setTimeout(() => { if (c === 0 && run === r) Voice.say(FIRST_REP[tp], { wait: false, rate: 1.08 }); }, 250);
       const cue = ex.cues[Math.floor(Math.random() * ex.cues.length)];
       const finish2 = (fn) => { clearInterval(iv); E.onCount = null; fn(); };
       E.onCount = () => {
@@ -418,6 +449,7 @@
         else if (c === n - 1 && n > 3) t = `${c}, dernière !`;
         else if (c === n - 3 && n >= 8) t = `${c}, plus que trois !`;
         else if (c === cueAt && S.settings.cues) t = `${c}. ${cue}.`;
+        else if (c === hypeAt && S.settings.cues) t = `${c}. ${HYPE[Math.floor(Math.random() * HYPE.length)]}`;
         if (S.settings.count) Voice.say(t, { wait: false, interrupt: true }); else setCoachText(t);
         if (c >= n) finish2(() => { E.setMode('settle'); res(); });
       };
@@ -890,6 +922,11 @@
         <dt>Volume conseillé</dt><dd>${d.sets} × ${d.reps ? d.reps + ' répétitions' : d.secs + ' secondes'}</dd><dt>Niveau</dt><dd>${['', 'Débutant', 'Intermédiaire', 'Avancé'][ex.level]}</dd></dl>
       <div class="card"><h3>Exécution</h3><ol class="steps">${ex.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>
       ${ex.sided ? `<div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="note">Exercice unilatéral : en séance, le coach fait les deux côtés.</span><button class="btn ghost sm" data-act="other-side">Voir l'autre côté</button></div>` : ''}
+      ${(() => { const co = CO[ex.id]; if (!co) return ''; const v = (id, l) => id && byId[id] && id !== ex.id ? `<button class="chip" data-ex="${id}">${l} : ${esc(byId[id].name)}</button>` : '';
+        return `<div class="card"><h3>Erreurs à éviter</h3><ul class="steps" style="list-style:disc">${(co.errors || []).map((e2) => `<li>${esc(e2)}</li>`).join('')}</ul>
+          ${co.mistake ? `<div class="row"><button class="btn ghost sm" data-act="show-mistake">Voir l'erreur</button><button class="btn ghost sm" data-act="show-good">Voir le bon geste</button></div>` : ''}
+          ${co.tempo ? `<div class="note">Tempo : ${esc(/\d/.test(co.tempo) ? co.tempo.split('-').map((x, i) => (['descente', 'pause', 'montée'][i] || '') + ' ' + x + (/\d/.test(x) ? ' s' : '')).join(' · ') : co.tempo)}</div>` : ''}
+          <div class="chips">${v(co.easier, 'Plus facile')}${v(co.harder, 'Plus difficile')}</div></div>`; })()}
       <div class="card"><h3>Ce que le coach te dira</h3><div class="chips">${ex.cues.map((c) => `<span class="tag">« ${esc(c)} »</span>`).join('')}</div>${ex.note ? `<div class="note">${esc(ex.note)}</div>` : ''}</div>
       <div class="row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn accent" data-act="try">${I.play} Faire 1 série</button>
         <button class="btn ghost" data-act="${inCustom ? 'rm-custom' : 'add-custom'}">${inCustom ? 'Retirer de ma séance' : '+ Ajouter à ma séance'}</button></div>`;
@@ -1190,6 +1227,8 @@
           case 'clear-model': E.clearModel(); modelState.name = null; IDB.del('avatar'); applyRealistic(); render(); toast('Avatar intégré rétabli.'); break;
           case 'start-custom': startSession({ title: 'Ma séance', items: S.custom.map((x) => ({ ...x })) }); break;
           case 'ex-back': state.exDetail = null; render(); break;
+          case 'show-mistake': { const ex = byId[state.exDetail], mx = ex && mistakeEx(ex); if (mx && !run) { E.setExercise(mx); E.setMode('loop'); E.setSpeed(0.8 * tempo()); overlay(warnPill(CO[ex.id].mistake.label)); setCoachText('À ne pas faire : ' + CO[ex.id].mistake.label.toLowerCase() + '.'); } break; }
+          case 'show-good': { const ex = byId[state.exDetail]; if (ex && !run) { overlay(null); E.setExercise(ex); E.setMode('loop'); E.setSpeed(0.9 * tempo()); setCoachText('Le bon geste : ' + ex.steps[0]); } break; }
           case 'other-side': { const cur = E.ex; if (cur && !run) { E.setExercise(E.mirror(cur)); E.setMode('loop'); } break; }
           case 'try': { const ex = byId[state.exDetail]; startSession({ title: ex.name, items: [{ ex, sets: 1, n: ex.def.reps || ex.def.secs }], quick: true }); break; }
           case 'add-custom': { const ex = byId[state.exDetail]; S.custom.push({ id: ex.id, sets: ex.def.sets, n: ex.def.reps || ex.def.secs }); save(); render(); toast(`${ex.name} ajouté à ta séance.`); break; }

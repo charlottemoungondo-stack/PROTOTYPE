@@ -72,6 +72,7 @@ button { cursor: pointer; }
 .big-overlay .n { font-family: var(--f-display); font-stretch: 125%; font-weight: 900; font-size: clamp(90px, 16vw, 180px); line-height: .9; color: var(--ink); text-shadow: 0 2px 30px var(--stage); }
 .big-overlay .lbl { font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: 13px; color: var(--muted); }
 .big-overlay .next { margin-top: 8px; font-size: 15px; font-weight: 600; }
+.warn-pill { display: inline-block; background: #d93b2b; color: #fff; font-weight: 800; letter-spacing: .02em; padding: 10px 16px; border-radius: 999px; font-size: 15px; box-shadow: var(--shadow); }
 .hud-bottom { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: end; gap: 12px; }
 .counter { position: relative; width: 132px; height: 132px; background: var(--hud); backdrop-filter: blur(10px); border-radius: 50%; box-shadow: var(--shadow); display: grid; place-items: center; }
 .counter svg { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); transform: rotate(-90deg); }
@@ -288,6 +289,7 @@ button { cursor: pointer; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/FBXLoader.js"></script>
 <script src="data.js"></script>
 <script src="tips.js"></script>
+<script src="coaching.js"></script>
 <script src="cloud-config.js"></script>
 <script src="cloud.js"></script>
 <script src="engine.js"></script>

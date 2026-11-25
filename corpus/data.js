@@ -922,6 +922,8 @@
       blurb: 'Pour en finir avec la nuque raide et le dos voûté.' },
     { id: 'squat30', title: '30 jours de squats', days: 30, aud: 'tous', single: 'squat', base: 20, step: 3,
       blurb: 'Un seul exercice, 20 squats le premier jour et 3 de plus chaque jour.' },
+    { id: 'pompes30', title: '30 jours de pompes', days: 30, aud: 'tous', single: 'pompes', base: 15, step: 2,
+      blurb: 'De 15 à 73 pompes par jour en trois séries. Sur les genoux au début si besoin, la technique d\'abord.' },
     { id: 'transfo60', title: '60 jours de transformation', days: 60, aud: 'tous', rotation: ['full-maison', 'fessiers', 'hiit', 'pecs', 'ventre', 'etirements', 'repos'],
       blurb: 'Deux mois pour changer de silhouette. Photo avant au jour 1, photo après au jour 60.' },
   ];
