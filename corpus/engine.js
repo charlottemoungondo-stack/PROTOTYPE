@@ -176,6 +176,9 @@
   function buildAvatar(cfg) {
     const f = cfg.sex === 'f';
     const S = f ? 1 : 1.065;
+    // Dimensions imposées par un modèle externe (en mètres), sinon proportions intégrées.
+    const Dm = cfg.dims || null;
+    const tk = Dm ? Dm.tk : 1;
     const hairC = new THREE.Color(cfg.hair);
     const M = {
       skin: skinMat(cfg.skin),
@@ -198,10 +201,10 @@
     const sk = (mesh, up, down, bu, bd, sculpt) => { mesh.userData.sk = { up, down, bu, bd, sculpt }; return mesh; };
     const bump = (x, y, z, cx, cy, cz, sg, a) => { const d2 = ((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2) / (sg * sg); return a * Math.exp(-d2); };
     b.root = new THREE.Bone();
-    b.spine = grp(b.root, 0, 0.09, 0);
-    b.chest = grp(b.spine, 0, 0.15, 0);
-    b.neck = grp(b.chest, 0, 0.225, 0);
-    b.head = grp(b.neck, 0, 0.072, 0);
+    b.spine = grp(b.root, 0, 0.09 * tk, 0);
+    b.chest = grp(b.spine, 0, 0.15 * tk, 0);
+    b.neck = grp(b.chest, 0, 0.225 * tk, 0);
+    b.head = grp(b.neck, 0, 0.072 * tk, 0);
 
     // Tronc
     sk(add(b.root, latheY([[-0.135, 0.03], [-0.12, 0.1], [-0.085, 0.152], [-0.02, f ? 0.168 : 0.158], [0.04, f ? 0.155 : 0.15], [0.1, f ? 0.128 : 0.138], [0.14, f ? 0.118 : 0.134]], M.bottom, 1, 0.72)), 'spine', null, 0.3, 0, (x, y, z) => {
@@ -247,15 +250,17 @@
     }
 
     // Membres
-    const UA = f ? 0.275 : 0.29, FA = f ? 0.24 : 0.255, TH = 0.41, SH = 0.4;
+    const UA = Dm ? Dm.UA / S : (f ? 0.275 : 0.29), FA = Dm ? Dm.FA / S : (f ? 0.24 : 0.255), TH = Dm ? Dm.TH / S : 0.41, SH = Dm ? Dm.SH / S : 0.4;
+    const SHX = Dm ? Dm.shX / S - 0.02 : (f ? 0.145 : 0.172), HIPX = Dm ? Dm.hipX / S : (f ? 0.088 : 0.092), HIPY = Dm ? Dm.hipY / S : -0.075;
+    const ANK = Dm ? Dm.ankleH / S : 0.078, TOE = Dm ? Dm.toe / S : 0.16;
     for (const s of ['L', 'R']) {
       const m = s === 'L' ? 1 : -1;
-      b['cl' + s] = grp(b.chest, 0.02 * m, 0.19, 0);
-      b['sh' + s] = grp(b['cl' + s], (f ? 0.145 : 0.172) * m, 0, 0);
+      b['cl' + s] = grp(b.chest, 0.02 * m, 0.19 * tk, 0);
+      b['sh' + s] = grp(b['cl' + s], SHX * m, 0, 0);
       b['sht' + s] = grp(b['sh' + s], 0, 0, 0);
       b['el' + s] = grp(b['sht' + s], 0, -UA, 0);
       b['wr' + s] = grp(b['el' + s], 0, -FA, 0);
-      b['hip' + s] = grp(b.root, (f ? 0.088 : 0.092) * m, -0.075, 0);
+      b['hip' + s] = grp(b.root, HIPX * m, HIPY, 0);
       b['hipt' + s] = grp(b['hip' + s], 0, 0, 0);
       b['kn' + s] = grp(b['hipt' + s], 0, -TH, 0);
       b['an' + s] = grp(b['kn' + s], 0, -SH, 0);
@@ -286,8 +291,8 @@
       add(b['an' + s], ellipsoid(M.sole, 0.051, 0.016, 0.132, 0, -0.064, 0.047));
       add(b['an' + s], ellipsoid(M.shoe, 0.04, 0.05, 0.05, 0, -0.01, -0.02));
 
-      mark('heel' + s, b['an' + s], 0, -0.078, -0.055, 0);
-      mark('toe' + s, b['an' + s], 0, -0.078, 0.16, 0);
+      mark('heel' + s, b['an' + s], 0, -ANK, -0.055, 0);
+      mark('toe' + s, b['an' + s], 0, -ANK, TOE, 0);
       mark('knee' + s, b['kn' + s], 0, 0, 0, 0.05);
       mark('hand' + s, b['wr' + s], 0, -0.07, 0, 0.022);
       mark('elbow' + s, b['el' + s], 0, 0, 0, 0.036);
@@ -304,6 +309,7 @@
     mark('chestF', b.chest, 0, 0.1, 0.05, 0.088);
     mark('headM', b.head, 0, 0.095, 0, 0.105);
 
+    b.root.traverse((o) => { if (o.isMesh) o.userData.body = true; });
     const skinned = skinBody(b);
     const rig = { b, markers, S, f, M, skinned, lens: { UA, FA, TH, SH } };
     // Queue de cheval (simulée)
@@ -844,10 +850,13 @@
       for (const sm of E.rig.skinned) avatarHolder.remove(sm);
       if (E.rig.tail) scene.remove(E.rig.tail.group);
     }
+    if (E.custom && !cfg.dims) cfg = Object.assign({}, cfg, { dims: E.custom.dims });
+    E.lastCfg = Object.assign({}, cfg, { dims: null });
     E.rig = buildAvatar(cfg);
     avatarHolder.add(E.rig.b.root);
     for (const sm of E.rig.skinned) avatarHolder.add(sm);
     if (E.rig.tail) scene.add(E.rig.tail.group);
+    if (E.custom) hideRig(true);
     if (E.ex) E.setExercise(E.ex, { keepPhase: true, noBlend: true });
   };
 
@@ -951,6 +960,7 @@
       }
       for (const d of dynProps) d.update && d.update();
       updateTail(dt);
+      if (E.custom) retarget();
       // caméra qui suit le corps
       const c = bodyCenter();
       const delta = V().subVectors(c, controls.target).multiplyScalar(1 - Math.exp(-dt * 3));
@@ -971,6 +981,133 @@
   E.debugSolve = (ex, t) => { compile(ex); E.setExercise(ex, { noBlend: true }); E.phase = t; E.mode = 'still'; };
   E.renderNow = () => renderer.render(scene, camera);
   E._dbg = () => ({ cam: camera.position.toArray().map(v=>+v.toFixed(2)), tgt: controls.target.toArray().map(v=>+v.toFixed(2)), goal: camOffsetGoal && camOffsetGoal.toArray().map(v=>+v.toFixed(2)), user: E.userOrbit, view: E.view, aspect: camera.aspect });
+  /* ---------- Avatar externe (modèle humain réaliste .glb) ---------- */
+  // Les os du modèle sont reconnus par leur nom (Mixamo, Unity/VRM, Unreal/MakeHuman, Character Creator),
+  // alignés sur la pose de repos du coach, puis pilotés à chaque image par le squelette procédural.
+  const norm = (n) => n.toLowerCase().replace(/^mixamorig\d*[:_]?/, '').replace(/^cc_base_/, '').replace(/^(armature|rig|bip0?1|def)[_ .:-]/, '').replace(/[\s_.:\-]/g, '');
+  function sideNames(base, alts) {
+    const out = { L: [], R: [] };
+    for (const a of [base].concat(alts)) {
+      out.L.push('left' + a, a + 'l', 'l' + a); out.R.push('right' + a, a + 'r', 'r' + a);
+    }
+    return out;
+  }
+  const BONE_NAMES = {
+    hips: ['hips', 'hip', 'pelvis'],
+    spine: ['spine', 'spine01', 'spine0', 'waist'],
+    spine1: ['spine1', 'spine02', 'chest', 'spine01x'],
+    spine2: ['spine2', 'spine03', 'upperchest', 'chest1'],
+    neck: ['neck', 'neck01', 'necktwist01'],
+    head: ['head'],
+  };
+  const SIDE_BONES = {
+    shoulder: sideNames('shoulder', ['clavicle']), arm: sideNames('arm', ['upperarm']), forearm: sideNames('forearm', ['lowerarm']),
+    hand: sideNames('hand', []), upleg: sideNames('upleg', ['thigh', 'upperleg']), leg: sideNames('leg', ['calf', 'lowerleg', 'shin']), foot: sideNames('foot', []),
+    toe: sideNames('toebase', ['toe', 'toes', 'ball']),
+  };
+  function findBones(root) {
+    const all = {};
+    root.traverse((o) => { if (o.isBone || o.type === 'Bone' || /hips|pelvis|spine|arm|leg|thigh|calf|foot|hand|head|neck/i.test(o.name)) { const k = norm(o.name); if (!(k in all)) all[k] = o; } });
+    const pick = (cands) => { for (const c of cands) if (all[c]) return all[c]; return null; };
+    const B = {};
+    for (const k in BONE_NAMES) B[k] = pick(BONE_NAMES[k]);
+    for (const k in SIDE_BONES) { B[k + 'L'] = pick(SIDE_BONES[k].L); B[k + 'R'] = pick(SIDE_BONES[k].R); }
+    if (!B.spine1 && B.spine2) { B.spine1 = B.spine2; B.spine2 = null; }
+    return B;
+  }
+  const wpos = (o) => o.getWorldPosition(V());
+  function setWorldQuat(o, q) {
+    o.parent.getWorldQuaternion(_pq);
+    o.quaternion.copy(_pq.invert().multiply(q));
+    o.updateMatrixWorld(true);
+  }
+  function alignSeg(bone, child, dir) {
+    if (!bone || !child) return;
+    const d = wpos(child).sub(wpos(bone)).normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(d, dir);
+    setWorldQuat(bone, q.multiply(bone.getWorldQuaternion(new THREE.Quaternion())));
+  }
+  // Prépare un modèle : renvoie les dimensions mesurées et l'état d'alignement.
+  E.prepareModel = function (scene) {
+    const B = findBones(scene);
+    const need = ['hips', 'spine', 'head', 'armL', 'armR', 'forearmL', 'forearmR', 'handL', 'handR', 'uplegL', 'uplegR', 'legL', 'legR', 'footL', 'footR'];
+    const missing = need.filter((k) => !B[k]);
+    if (missing.length) throw new Error('Squelette non reconnu (os manquants : ' + missing.join(', ') + ').');
+    scene.updateMatrixWorld(true);
+    // Pieds au sol
+    const box = new THREE.Box3().setFromObject(scene);
+    scene.position.y -= box.min.y; scene.updateMatrixWorld(true);
+    // Orientation : le modèle doit regarder vers +Z (gauche du personnage vers +X)
+    if (wpos(B.armL).x < wpos(B.armR).x) { scene.rotation.y += Math.PI; scene.updateMatrixWorld(true); }
+    const DOWN = V(0, -1, 0), UPV = V(0, 1, 0);
+    const chain = [[B.hips, B.spine], [B.spine, B.spine1 || B.neck], [B.spine1, B.spine2 || B.neck], [B.spine2, B.neck], [B.neck, B.head]];
+    for (const [a, c] of chain) if (a && c) alignSeg(a, c, UPV);
+    for (const s of ['L', 'R']) {
+      alignSeg(B['arm' + s], B['forearm' + s], DOWN);
+      alignSeg(B['forearm' + s], B['hand' + s], DOWN);
+      const hc = B['hand' + s].children.find((c) => /middle|hand.*1|finger/i.test(c.name)) || B['hand' + s].children[0];
+      if (hc) alignSeg(B['hand' + s], hc, DOWN);
+      alignSeg(B['upleg' + s], B['leg' + s], DOWN);
+      alignSeg(B['leg' + s], B['foot' + s], DOWN);
+    }
+    scene.updateMatrixWorld(true);
+    const box2 = new THREE.Box3().setFromObject(scene);
+    const hips = wpos(B.hips);
+    const d = (a, b2) => wpos(a).distanceTo(wpos(b2));
+    const footL = wpos(B.footL);
+    const dims = {
+      UA: d(B.armL, B.forearmL), FA: d(B.forearmL, B.handL), TH: d(B.uplegL, B.legL), SH: d(B.legL, B.footL),
+      shX: Math.abs(wpos(B.armL).x - hips.x), hipX: Math.abs(wpos(B.uplegL).x - hips.x), hipY: wpos(B.uplegL).y - hips.y,
+      ankleH: Math.max(0.03, footL.y - Math.min(0, box2.min.y)), toe: B.toeL ? Math.max(0.08, wpos(B.toeL).z - footL.z + 0.05) : 0.16,
+      tk: Math.max(0.6, (wpos(B.armL).y - hips.y) / 0.43),
+    };
+    const rest = {};
+    for (const k in B) if (B[k]) rest[k] = B[k].getWorldQuaternion(new THREE.Quaternion());
+    return { scene, B, rest, dims, hipsRest: hips.clone() };
+  };
+  const MAP = [['hips', 'root'], ['spine', 'spine'], ['spine1', ['spine', 'chest']], ['spine2', 'chest'], ['neck', 'neck'], ['head', 'head'],
+    ['shoulderL', 'clL'], ['armL', 'shtL'], ['forearmL', 'elL'], ['handL', 'wrL'], ['uplegL', 'hiptL'], ['legL', 'knL'], ['footL', 'anL'],
+    ['shoulderR', 'clR'], ['armR', 'shtR'], ['forearmR', 'elR'], ['handR', 'wrR'], ['uplegR', 'hiptR'], ['legR', 'knR'], ['footR', 'anR']];
+  const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion();
+  function retarget() {
+    const C = E.custom, rig = E.rig;
+    rig.b.root.updateMatrixWorld(true);
+    // position du bassin
+    const rp = rig.b.root.getWorldPosition(V());
+    const rq = rig.b.root.getWorldQuaternion(new THREE.Quaternion());
+    const off = V().subVectors(C.hipsRest, C.rigRootRest).applyQuaternion(rq);
+    const hp = rp.add(off);
+    const hips = C.B.hips;
+    hips.parent.updateMatrixWorld(true);
+    hips.position.copy(hips.parent.worldToLocal(hp));
+    for (const [tk, src] of MAP) {
+      const bone = C.B[tk]; if (!bone || !C.rest[tk]) continue;
+      if (Array.isArray(src)) { rig.b[src[0]].getWorldQuaternion(_qa); rig.b[src[1]].getWorldQuaternion(_qb); _qa.slerp(_qb, 0.5); }
+      else rig.b[src].getWorldQuaternion(_qa);
+      setWorldQuat(bone, _qa.multiply(C.rest[tk]));
+    }
+  }
+  E.useModel = function (prepared) {
+    E.clearModel(true);
+    E.custom = prepared;
+    avatarHolder.add(prepared.scene);
+    prepared.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+    prepared.rigRootRest = V(0, -prepared.dims.hipY + prepared.dims.TH + prepared.dims.SH + prepared.dims.ankleH, 0);
+    E.setAvatar(Object.assign({}, E.lastCfg, { dims: prepared.dims }));
+  };
+  E.clearModel = function (keep) {
+    if (!E.custom) return;
+    avatarHolder.remove(E.custom.scene);
+    E.custom = null;
+    if (!keep) { E.setAvatar(Object.assign({}, E.lastCfg, { dims: null })); }
+  };
+  function hideRig(hide) {
+    if (!E.rig) return;
+    E.rig.b.root.traverse((o) => { if (o.isMesh && o.userData.body) o.visible = !hide; });
+    for (const sm of E.rig.skinned) sm.visible = !hide;
+    if (E.rig.tail) E.rig.tail.group.visible = !hide;
+  }
+
   // Version miroir d'un exercice (côté gauche ↔ droit).
   const NEG = ['rr', 'ry', 'spS', 'spT', 'nkS', 'nkT'];
   const swapName = (n) => (typeof n === 'string' ? n.replace(/(L|R)$/, (c) => (c === 'L' ? 'R' : 'L')) : n);

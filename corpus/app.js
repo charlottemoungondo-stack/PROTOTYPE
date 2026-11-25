@@ -96,6 +96,37 @@
     },
     stop() { if (synth) synth.cancel(); speaking(false); },
   };
+  /* ---------- Avatar réaliste importé (.glb) ---------- */
+  const IDB = {
+    open() { return new Promise((res, rej) => { const r = indexedDB.open('corpus', 1); r.onupgradeneeded = () => r.result.createObjectStore('files'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+    async put(k, v) { const db = await this.open(); return new Promise((res, rej) => { const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').put(v, k); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); },
+    async get(k) { const db = await this.open(); return new Promise((res, rej) => { const tx = db.transaction('files', 'readonly'); const r = tx.objectStore('files').get(k); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+    async del(k) { const db = await this.open(); return new Promise((res) => { const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').delete(k); tx.oncomplete = res; tx.onerror = res; }); },
+  };
+  const modelState = { name: null, error: null, loading: false };
+  function loadModel(buf, name) {
+    return new Promise((res, rej) => {
+      if (!THREE.GLTFLoader) return rej(new Error('Le chargeur de modèles 3D n\'est pas disponible.'));
+      new THREE.GLTFLoader().parse(buf, '', (gltf) => {
+        try { const prep = E.prepareModel(gltf.scene); E.useModel(prep); res(prep); } catch (err) { rej(err); }
+      }, (err) => rej(new Error('Ce fichier n\'est pas un modèle .glb lisible.')));
+    });
+  }
+  async function importModel(file) {
+    modelState.loading = true; modelState.error = null; render();
+    try {
+      const buf = await file.arrayBuffer();
+      await loadModel(buf, file.name);
+      modelState.name = file.name;
+      try { await IDB.put('avatar', { name: file.name, buf }); } catch (e) { /* stockage indisponible : le modèle restera jusqu'au rechargement */ }
+      toast('Avatar importé. Le coach a pris son nouveau corps.');
+    } catch (err) { modelState.error = err.message; }
+    modelState.loading = false; render();
+  }
+  async function restoreModel() {
+    try { const rec = await IDB.get('avatar'); if (rec && rec.buf) { await loadModel(rec.buf, rec.name); modelState.name = rec.name; if (state.tab === 'reglages') render(); } } catch (e) { /* aucun modèle enregistré */ }
+  }
+
   /* ---------- Commandes vocales ---------- */
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const Listen = {
@@ -790,6 +821,13 @@
       <div><h2>Ton coach</h2><p class="lead">Choisis la personne qui t'accompagne, son apparence et sa voix.</p></div>
       <div class="setting"><span>Coach</span><div class="seg" role="group">
         <button data-set="coach" data-v="f" aria-pressed="${st.coach === 'f'}">Léa</button><button data-set="coach" data-v="m" aria-pressed="${st.coach === 'm'}">Malik</button></div></div>
+      <div class="card"><h3>Avatar réaliste (bêta)</h3>
+        <p class="note">Importe un personnage 3D humain au format .glb avec un squelette standard (Mixamo, Character Creator, MakeHuman, Unity/VRM). Le coach reprend tous ses mouvements avec ce corps. Le fichier reste sur cet appareil.</p>
+        ${modelState.name ? `<div class="row">${I.check}<b>${esc(modelState.name)}</b><button class="btn ghost sm" data-act="clear-model">Revenir à l'avatar intégré</button></div>` : ''}
+        ${modelState.loading ? '<div class="note">Chargement du modèle…</div>' : ''}
+        ${modelState.error ? `<div class="safety">${esc(modelState.error)} Vérifie que le personnage a un squelette humanoïde complet (bassin, colonne, bras, jambes).</div>` : ''}
+        <label class="btn ghost sm" style="justify-self:start">Importer un fichier .glb<input type="file" id="model-file" accept=".glb,model/gltf-binary" hidden></label>
+      </div>
       <div class="setting"><span>Peau</span><div class="swatches">${SKINS.map((c, i) => `<button class="sw" style="background:${c}" data-set="skin" data-v="${i}" aria-pressed="${st.skin === i}" aria-label="Teinte ${i + 1}"></button>`).join('')}</div></div>
       <div class="setting"><span>Cheveux</span><div class="swatches">${HAIRS.map((c, i) => `<button class="sw" style="background:${c}" data-set="hair" data-v="${i}" aria-pressed="${st.hair === i}" aria-label="Couleur ${i + 1}"></button>`).join('')}</div></div>
       <div class="setting"><span>Tenue</span><div class="swatches">${OUTFITS.map((o, i) => `<button class="sw duo" style="--a:${o.top};--b:${o.bottom}" data-set="outfit" data-v="${i}" aria-pressed="${st.outfit === i}" aria-label="${o.n}"></button>`).join('')}</div></div>
@@ -873,6 +911,7 @@
           case 'cancel-profile': state.editProfile = false; state.draft = null; render(); break;
           case 'edit-profile': state.editProfile = true; state.draft = Object.assign({}, S.profile); state.tab = 'accueil'; render(); break;
           case 'tip-back': state.tip = null; render(); break;
+          case 'clear-model': E.clearModel(); modelState.name = null; IDB.del('avatar'); render(); toast('Avatar intégré rétabli.'); break;
           case 'start-custom': startSession({ title: 'Ma séance', items: S.custom.map((x) => ({ ...x })) }); break;
           case 'ex-back': state.exDetail = null; render(); break;
           case 'other-side': { const cur = E.ex; if (cur && !run) { E.setExercise(E.mirror(cur)); E.setMode('loop'); } break; }
@@ -895,7 +934,8 @@
     };
     v.onchange = async (e) => {
       const t = e.target;
-      if (t.id === 'ph-file' && t.files && t.files[0]) {
+      if (t.id === 'model-file' && t.files && t.files[0]) { importModel(t.files[0]); }
+      else if (t.id === 'ph-file' && t.files && t.files[0]) {
         try {
           const src = await resizeImage(t.files[0]);
           const p = { id: String(Date.now()), date: $('#ph-date').value || ymd(), label: $('#ph-label').value, src };
@@ -960,6 +1000,7 @@
     preview(state.previewEx, false);
     setCoachText(`Salut, c'est ${coach().name} ! Choisis une séance, ou touche un exercice pour le voir en 3D.`);
     Voice.init();
+    if (window.indexedDB) restoreModel();
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const re = () => setTimeout(() => E.applyTheme && E.applyTheme(), 30);
     mq.addEventListener && mq.addEventListener('change', re);

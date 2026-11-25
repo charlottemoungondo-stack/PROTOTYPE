@@ -1,5 +1,5 @@
 /* Corpus — service worker : garde l'application disponible hors connexion après la première visite. */
-const CACHE = 'corpus-v3';
+const CACHE = 'corpus-v4';
 const CORE = ['./', './index.html', './data.js', './tips.js', './engine.js', './app.js', './manifest.webmanifest', './icon-192.png', './icon-512.png',
   'https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js',
   'https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js',
