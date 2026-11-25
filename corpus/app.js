@@ -35,8 +35,8 @@
   /* ---------- Données locales ---------- */
   const KEY = 'corpus.v1', PKEY = 'corpus.photos.v1';
   const DEFAULTS = {
-    settings: { coach: 'f', skin: 2, hair: 0, outfit: 0, voice: true, voiceURI: '', count: true, cues: true, tempo: 'normal', rest: 30, warm: true },
-    place: 'maison', aud: 'tous', custom: [], history: [], challenges: {}, measures: [],
+    settings: { coach: 'f', skin: 2, hair: 0, outfit: 0, voice: true, voiceURI: '', count: true, cues: true, tempo: 'normal', rest: 30, warm: true, listen: false },
+    place: 'maison', aud: 'tous', custom: [], history: [], challenges: {}, measures: [], profile: null,
   };
   function load(k, fb) { try { const v = JSON.parse(localStorage.getItem(k)); return v || fb; } catch (e) { return fb; } }
   const S = Object.assign(JSON.parse(JSON.stringify(DEFAULTS)), load(KEY, {}));
@@ -96,12 +96,45 @@
     },
     stop() { if (synth) synth.cancel(); speaking(false); },
   };
+  /* ---------- Commandes vocales ---------- */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const Listen = {
+    supported: !!SR, rec: null, on: false,
+    sync() {
+      const want = !!(SR && S.settings.listen && run);
+      if (want && !this.on) this.start(); else if (!want && this.on) this.stop();
+    },
+    start() {
+      try {
+        const rec = this.rec = new SR();
+        rec.lang = 'fr-FR'; rec.continuous = true; rec.interimResults = false;
+        rec.onresult = (e) => { const r = e.results[e.results.length - 1]; if (r.isFinal) this.handle(r[0].transcript.toLowerCase()); };
+        rec.onerror = (e) => {
+          if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { this.on = false; S.settings.listen = false; save(); toast('Le micro n\'est pas autorisé ici. Les commandes vocales sont désactivées.'); }
+        };
+        rec.onend = () => { if (this.on && run) { try { rec.start(); } catch (err) { /* déjà démarré */ } } };
+        rec.start(); this.on = true;
+      } catch (err) { this.on = false; }
+    },
+    stop() { this.on = false; try { this.rec && this.rec.stop(); } catch (err) { /* rien */ } },
+    handle(t) {
+      if (!run) return;
+      if (/\b(stop|arr[êe]te|termin)/.test(t)) stopSession();
+      else if (/\b(pause|attends)\b/.test(t)) { if (!run.paused) togglePause(); }
+      else if (/\b(reprend|reprends|continue|c'est reparti|go)\b/.test(t)) { if (run.paused) togglePause(); }
+      else if (/\b(suivant|passe|next|saute)\b/.test(t)) { if (run.phase === 'rest') run.skipRest = true; else run.skip = true; }
+      else if (/\b(r[ée]p[èe]te|quoi)\b/.test(t)) { const ex = E.ex; if (ex) Voice.say(ex.steps.join(' '), { wait: false, interrupt: true }); }
+      else return;
+      toast(`Commande : « ${t.trim()} »`);
+    },
+  };
+
   function speaking(on) { $('#coach-line').classList.toggle('speaking', on); }
   function setCoachText(t) { $('#coach-text').textContent = t; }
   const sleepPlain = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /* ---------- État de l'interface ---------- */
-  const state = { tab: 'seances', exQuery: '', exZones: new Set(), exDetail: null, selPhotos: [], confirm: null, previewEx: byId.squat };
+  const state = { tab: 'accueil', tip: null, editProfile: false, exQuery: '', exZones: new Set(), exDetail: null, selPhotos: [], confirm: null, previewEx: byId.squat };
   let run = null;
   const STOP = { stop: true };
 
@@ -214,6 +247,12 @@
   async function startSession(plan) {
     if (run) stopSession(true);
     plan.items = plan.items.map((it) => ({ ex: it.ex || byId[it.id], sets: it.sets, n: it.n }));
+    const lvl = S.profile ? S.profile.level : 'inter';
+    if (!plan.quick && !plan.challenge && lvl !== 'inter') {
+      plan.items = plan.items.map((it) => lvl === 'debutant'
+        ? { ...it, sets: Math.max(1, it.sets - 1), n: Math.max(it.ex.hold ? 15 : 5, Math.round(it.n * 0.75)) }
+        : { ...it, sets: it.sets + (it.sets >= 3 ? 1 : 0), n: Math.round(it.n * 1.15) });
+    }
     if (!plan.quick && S.settings.warm) {
       const mobility = plan.items.every((it) => it.ex.stretch || it.ex.zones.includes('cou') || it.ex.aud.includes('mobilite'));
       if (!mobility) plan.items = [...warmItems(), ...plan.items, ...coolItems(plan.items)];
@@ -221,7 +260,7 @@
     const r = run = { plan, paused: false, skip: false, skipRest: false, stop: false, t0: Date.now(), pausedMs: 0, reps: 0, idx: 0, set: 1, phase: 'intro', done: [],
       warmN: plan.items.filter((x) => x.phase === 'warm').length, mainN: plan.items.filter((x) => !x.phase).length };
     if (navigator.wakeLock) navigator.wakeLock.request('screen').then((l) => { r.lock = l; }).catch(() => {});
-    buildStrip(plan); renderControls(); state.tab = 'seances'; render(); updateStrip(r);
+    buildStrip(plan); renderControls(); if (state.tab !== 'accueil') state.tab = 'seances'; render(); updateStrip(r); Listen.sync();
     try {
       const first = plan.items[0];
       E.setExercise(first.ex); E.setMode('loop'); E.setSpeed(0.7 * tempo()); setViewButtons('');
@@ -382,6 +421,7 @@
     if (r.finished) return; r.finished = true;
     if (r.lock) r.lock.release().catch(() => {});
     if (run === r) run = null;
+    Listen.sync();
     Voice.stop();
     const mins = Math.max(1, Math.round((Date.now() - r.t0 - r.pausedMs) / 60000));
     $('#strip').hidden = true; $('#counter').hidden = true;
@@ -409,11 +449,11 @@
   }
 
   /* ---------- Panneau ---------- */
-  function setTab(t) { state.tab = t; state.exDetail = null; state.confirm = null; render(); $('#panel').scrollTop = 0; }
+  function setTab(t) { state.tab = t; state.exDetail = null; state.confirm = null; state.tip = null; render(); $('#panel').scrollTop = 0; }
   function render() {
     $$('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)));
     const v = $('#view');
-    const fn = { seances: viewSeances, exercices: viewExercices, defis: viewDefis, progres: viewProgres, reglages: viewReglages }[state.tab];
+    const fn = { accueil: viewAccueil, seances: viewSeances, exercices: viewExercices, defis: viewDefis, progres: viewProgres, reglages: viewReglages }[state.tab];
     v.innerHTML = fn();
     bind(v);
   }
@@ -442,6 +482,109 @@
       </details>
       <div class="row"><button class="btn accent" data-start="${p.id}">${I.play} Démarrer</button></div>
     </article>`;
+  }
+
+  /* ---------- Profil & accueil ---------- */
+  const GOALS = [
+    ['ventre', 'Perdre du ventre'], ['fessiers', 'Galber les fessiers'], ['muscle', 'Prendre du muscle'], ['forme', 'Garder la forme'],
+    ['souplesse', 'Souplesse et dos'], ['running', 'Courir mieux'], ['grossesse', 'Sport pendant la grossesse'], ['senior', 'Bouger en douceur'],
+  ];
+  const LEVELS = [['debutant', 'Débutant(e)'], ['inter', 'Intermédiaire'], ['avance', 'Avancé(e)']];
+  const GOAL_PLAN = {
+    ventre: { progs: ['ventre', 'hiit', 'pilates', 'full-maison'], ch: 'ventre52', tips: ['ventre', 'regularite', 'sommeil'] },
+    fessiers: { progs: ['fessiers', 'silhouette-salle', 'hiit', 'full-maison'], ch: 'fessiers30', tips: ['fessiers', 'photos', 'regularite'] },
+    muscle: { progs: ['pecs', 'bras', 'force-salle', 'full-maison'], ch: 'bras21', tips: ['muscle', 'sommeil', 'recup'] },
+    forme: { progs: ['full-maison', 'hiit', 'dos-cou', 'reveil'], ch: 'transfo60', tips: ['regularite', 'echauffement', 'eau'] },
+    souplesse: { progs: ['etirements', 'dos-cou', 'pilates', 'reveil'], ch: 'dos28', tips: ['dos', 'respiration', 'regularite'] },
+    running: { progs: ['running', 'etirements', 'hiit', 'full-maison'], ch: 'squat30', tips: ['running', 'recup', 'sommeil'] },
+    grossesse: { progs: ['grossesse', 'etirements'], ch: null, tips: ['grossesse', 'respiration', 'eau'] },
+    senior: { progs: ['seniors', 'reveil', 'etirements', 'dos-cou'], ch: null, tips: ['seniors', 'echauffement', 'regularite'] },
+  };
+  const needsDumbbells = (p) => p.items.some((it) => byId[it.id].equip.includes('haltères'));
+  function recoPrograms() {
+    const pr = S.profile; if (!pr) return [];
+    const ids = GOAL_PLAN[pr.goal].progs;
+    let list = ids.map((id) => progById[id]).filter(Boolean);
+    if (pr.place === 'maison') list = list.filter((p) => p.place === 'maison');
+    list.sort((a, b) => (needsDumbbells(a) && !pr.dumbbells) - (needsDumbbells(b) && !pr.dumbbells));
+    return list;
+  }
+  function todayPlan() {
+    for (const c of CHALLENGES) {
+      const st = S.challenges[c.id]; if (!st) continue;
+      const day = chDay(c); if (day < 1) continue;
+      const plan = chPlan(c, day);
+      return { kind: 'challenge', c, day, plan, done: st.done.includes(day) };
+    }
+    const reco = recoPrograms(); if (!reco.length) return null;
+    const p = reco[S.history.length % reco.length];
+    return { kind: 'program', p, done: S.history.some((h) => h.date === ymd() && h.complete) };
+  }
+  function weekCount() {
+    const d = new Date(); const day = (d.getDay() + 6) % 7; d.setDate(d.getDate() - day);
+    const start = ymd(d);
+    return S.history.filter((h) => h.date >= start).length;
+  }
+  function viewOnboarding() {
+    const pr = S.profile || { name: '', sex: 'f', goal: 'ventre', level: 'debutant', freq: 3, place: S.place, dumbbells: false };
+    const chip = (k, v, l) => `<button class="chip" data-pf="${k}" data-v="${v}" aria-pressed="${String(pr[k]) === String(v)}">${l}</button>`;
+    state.draft = state.draft || Object.assign({}, pr);
+    const d = state.draft;
+    const dchip = (k, v, l) => `<button class="chip" data-pf="${k}" data-v="${v}" aria-pressed="${String(d[k]) === String(v)}">${l}</button>`;
+    return `<div><h2>${S.profile ? 'Ton profil' : 'Bienvenue sur Corpus'}</h2><p class="lead">Quelques questions pour que ton coach te prépare le bon programme.</p></div>
+      <div class="form" style="grid-template-columns:1fr"><label>Ton prénom (facultatif)<input id="pf-name" value="${esc(d.name || '')}" autocomplete="given-name" placeholder="Ex. Charlotte"></label></div>
+      <div class="setting"><span>Tu es</span><div class="chips">${dchip('sex', 'f', 'Une femme')}${dchip('sex', 'm', 'Un homme')}</div></div>
+      <div class="setting"><span>Ton objectif principal</span><div class="chips">${GOALS.map(([k, l]) => dchip('goal', k, l)).join('')}</div></div>
+      <div class="setting"><span>Ton niveau</span><div class="chips">${LEVELS.map(([k, l]) => dchip('level', k, l)).join('')}</div></div>
+      <div class="setting"><span>Séances par semaine</span><div class="chips">${[2, 3, 4, 5, 6].map((n) => dchip('freq', n, String(n))).join('')}</div></div>
+      <div class="setting"><span>Tu t'entraînes surtout</span><div class="chips">${dchip('place', 'maison', 'À la maison')}${dchip('place', 'salle', 'En salle')}</div></div>
+      <div class="setting"><span>Tu as des haltères ?</span><div class="chips">${dchip('dumbbells', true, 'Oui')}${dchip('dumbbells', false, 'Non')}</div></div>
+      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn accent" data-act="save-profile">${S.profile ? 'Enregistrer' : 'Créer mon programme'}</button>${S.profile ? '<button class="btn ghost" data-act="cancel-profile">Annuler</button>' : ''}</div>`;
+  }
+  function tipCard(t) { return `<button class="ex-row" data-tip="${t.id}"><div><div class="n">${esc(t.title)}</div><div class="z">${esc(t.cat)}</div></div><div class="z">Lire</div></button>`; }
+  function viewTip(t) {
+    return `<button class="back" data-act="tip-back">${I.back} Retour</button>
+      <div><div class="note">${esc(t.cat)}</div><h2>${esc(t.title)}</h2></div>
+      <div class="card">${t.body.map((p) => `<p style="margin:0">${esc(p)}</p>`).join('')}</div>
+      <p class="note">Conseils généraux, qui ne remplacent pas l'avis d'un médecin ou d'une sage-femme.</p>`;
+  }
+  function viewAccueil() {
+    if (!S.profile || state.editProfile) return viewOnboarding();
+    if (state.tip) return viewTip(window.CorpusTips.find((t) => t.id === state.tip));
+    const pr = S.profile, gp = GOAL_PLAN[pr.goal];
+    const tp = todayPlan();
+    const wk = weekCount();
+    const goalLabel = (GOALS.find((g) => g[0] === pr.goal) || [, ''])[1];
+    const h = new Date().getHours();
+    const hello = h < 12 ? 'Bonjour' : h < 18 ? 'Salut' : 'Bonsoir';
+    let today = '';
+    if (tp && tp.kind === 'challenge') {
+      today = tp.done ? `<div class="row">${I.check}<b>Séance du jour validée.</b><span class="note">Repos bien mérité.</span></div>`
+        : tp.plan ? `<p class="lead">${esc(tp.c.title)}, jour ${tp.day}${tp.plan.sub ? ' : ' + esc(tp.plan.sub) : ''}.</p><div class="row"><button class="btn accent" data-ch-go="${tp.c.id}">${I.play} C'est parti</button></div>`
+        : `<p class="lead">${esc(tp.c.title)}, jour ${tp.day} : jour de repos. Une marche de 20 minutes est idéale.</p><div class="row"><button class="btn ghost sm" data-ch-rest="${tp.c.id}">Valider le repos</button></div>`;
+    } else if (tp) {
+      const items = tp.p.items.map((it) => ({ ex: byId[it.id], sets: it.sets, n: it.n }));
+      today = `<p class="lead"><b>${esc(tp.p.title)}</b> · ${items.length} exercices · ~${estimateMin(items) + (S.settings.warm ? 4 : 0)} min</p>
+        <div class="chips">${zoneChips(programZones(items), 6)}</div>
+        <div class="row"><button class="btn accent" data-start="${tp.p.id}">${I.play} C'est parti</button>${tp.done ? '<span class="note">Déjà une séance aujourd\'hui, bravo !</span>' : ''}</div>`;
+    }
+    const ch = gp.ch && CHALLENGES.find((c) => c.id === gp.ch);
+    const chSuggest = ch && !S.challenges[ch.id] && !Object.keys(S.challenges).length
+      ? `<div class="card"><div class="row"><div class="grow"><div class="note">Défi conseillé</div><h3 class="prog-title">${esc(ch.title)}</h3></div><span class="tag">${ch.days} jours</span></div><p class="lead">${esc(ch.blurb)}</p><div class="row"><button class="btn ghost sm" data-ch-start="${ch.id}">Relever le défi</button></div></div>` : '';
+    const tips = gp.tips.map((id) => window.CorpusTips.find((t) => t.id === id)).filter(Boolean);
+    const others = window.CorpusTips.filter((t) => !gp.tips.includes(t.id) && (!t.aud.length || t.aud.includes(pr.sex === 'f' ? 'femme' : 'homme') || t.aud.some((a) => ['mobilite'].includes(a))));
+    return `<div><h2>${hello}${pr.name ? ' ' + esc(pr.name) : ''} !</h2><p class="lead">Objectif : ${esc(goalLabel.toLowerCase())} · ${esc((LEVELS.find((l) => l[0] === pr.level) || [, ''])[1].toLowerCase())} <button class="back" data-act="edit-profile" style="display:inline">· modifier</button></p></div>
+      ${sessionCard()}
+      <div class="card"><div class="row"><h3 class="grow">Ta séance du jour</h3></div>${today || '<p class="lead">Choisis une séance dans l\'onglet Séances.</p>'}</div>
+      <div class="stats">
+        <div class="stat"><div class="v">${wk}<span style="font-size:18px;color:var(--muted)"> / ${pr.freq}</span></div><div class="k">Séances cette semaine</div><div class="bar-track" style="margin-top:6px"><b style="width:${Math.min(100, Math.round(wk / pr.freq * 100))}%"></b></div></div>
+        <div class="stat"><div class="v">${streak()}</div><div class="k">Jours d'affilée</div></div>
+      </div>
+      ${chSuggest}
+      <div><h3>Recommandé pour toi</h3></div>
+      ${recoPrograms().slice(0, 3).map((p) => progCard(p) + (needsDumbbells(p) && !pr.dumbbells ? '' : '')).join('')}
+      <div class="card"><h3>Les conseils de ton coach</h3><ul class="ex-list">${tips.map((t) => `<li>${tipCard(t)}</li>`).join('')}</ul>
+        <details><summary class="note">Tous les conseils</summary><ul class="ex-list">${others.map((t) => `<li>${tipCard(t)}</li>`).join('')}</ul></details></div>`;
   }
 
   function viewSeances() {
@@ -643,7 +786,8 @@
   function viewReglages() {
     const st = S.settings;
     const voices = Voice.list;
-    return `<div><h2>Ton coach</h2><p class="lead">Choisis la personne qui t'accompagne, son apparence et sa voix.</p></div>
+    return `<div class="card"><div class="row"><div class="grow"><h3>Mon profil</h3><div class="note">${S.profile ? esc((GOALS.find((g) => g[0] === S.profile.goal) || [, ''])[1]) + ' · ' + S.profile.freq + ' séances par semaine' : 'Pas encore créé'}</div></div><button class="btn ghost sm" data-act="edit-profile">Modifier</button></div></div>
+      <div><h2>Ton coach</h2><p class="lead">Choisis la personne qui t'accompagne, son apparence et sa voix.</p></div>
       <div class="setting"><span>Coach</span><div class="seg" role="group">
         <button data-set="coach" data-v="f" aria-pressed="${st.coach === 'f'}">Léa</button><button data-set="coach" data-v="m" aria-pressed="${st.coach === 'm'}">Malik</button></div></div>
       <div class="setting"><span>Peau</span><div class="swatches">${SKINS.map((c, i) => `<button class="sw" style="background:${c}" data-set="skin" data-v="${i}" aria-pressed="${st.skin === i}" aria-label="Teinte ${i + 1}"></button>`).join('')}</div></div>
@@ -654,6 +798,8 @@
         <label class="toggle">Compter les répétitions à voix haute<input type="checkbox" id="s-count" ${st.count ? 'checked' : ''}></label>
         <label class="toggle">Conseils et encouragements pendant les séries<input type="checkbox" id="s-cues" ${st.cues ? 'checked' : ''}></label>
         <label class="toggle">Échauffement et étirements automatiques<input type="checkbox" id="s-warm" ${st.warm ? 'checked' : ''}></label>
+        <label class="toggle">Commandes vocales pendant la séance<input type="checkbox" id="s-listen" ${st.listen ? 'checked' : ''}></label>
+        <div class="note">Dis « pause », « reprends », « suivant », « répète » ou « stop ». Le micro ne s'active que pendant une séance.${Listen.supported ? '' : ' Ce navigateur ne propose pas la reconnaissance vocale : essaie Chrome, Edge ou Safari.'}</div>
         ${synth ? `<div class="form" style="grid-template-columns:1fr"><label>Voix<select id="s-vsel"><option value="">Automatique</option>${voices.map((v) => `<option value="${esc(v.voiceURI)}" ${v.voiceURI === st.voiceURI ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('')}</select></label></div>
           <button class="btn ghost sm" data-act="test-voice" style="justify-self:start">${I.sound} Tester la voix</button>`
           : '<div class="note">Ce navigateur ne propose pas de synthèse vocale : le coach parle par sous-titres.</div>'}
@@ -688,7 +834,9 @@
     v.onclick = async (e) => {
       const t = e.target.closest('button'); if (!t) return;
       const d = t.dataset;
-      if (d.aud) { S.aud = d.aud; save(); render(); }
+      if (d.pf) { const v = d.v === 'true' ? true : d.v === 'false' ? false : /^\d+$/.test(d.v) ? +d.v : d.v; state.draft[d.pf] = v; const nm = $('#pf-name'); if (nm) state.draft.name = nm.value; render(); }
+      else if (d.tip) { state.tip = d.tip; render(); $('#panel').scrollTop = 0; }
+      else if (d.aud) { S.aud = d.aud; save(); render(); }
       else if (d.start) { const p = progById[d.start]; startSession({ title: p.title, items: p.items.map((x) => ({ ...x })) }); }
       else if (d.prev) preview(byId[d.prev], true);
       else if (d.ex) { state.exDetail = d.ex; preview(byId[d.ex], true); render(); $('#panel').scrollTop = 0; }
@@ -712,6 +860,19 @@
       } else {
         switch (d.act) {
           case 'stop': stopSession(); break;
+          case 'save-profile': {
+            const first = !S.profile;
+            const dr = Object.assign({}, state.draft, { name: ($('#pf-name').value || '').trim().slice(0, 30) });
+            S.profile = dr; state.draft = null; state.editProfile = false;
+            if (first) { S.settings.coach = dr.sex; S.aud = dr.sex === 'f' ? 'femme' : 'homme'; E.setAvatar(avatarCfg()); updateCoachUi(); Voice.pick(); }
+            if (dr.goal === 'grossesse') S.aud = 'prenatal'; else if (dr.goal === 'senior') S.aud = 'senior';
+            save(); setPlace(dr.place);
+            if (first) Voice.say(`Enchanté${dr.sex === 'f' ? 'e' : ''}${dr.name ? ' ' + dr.name : ''} ! Je suis ${coach().name}, ton coach. Ton programme est prêt.`, { wait: false });
+            break;
+          }
+          case 'cancel-profile': state.editProfile = false; state.draft = null; render(); break;
+          case 'edit-profile': state.editProfile = true; state.draft = Object.assign({}, S.profile); state.tab = 'accueil'; render(); break;
+          case 'tip-back': state.tip = null; render(); break;
           case 'start-custom': startSession({ title: 'Ma séance', items: S.custom.map((x) => ({ ...x })) }); break;
           case 'ex-back': state.exDetail = null; render(); break;
           case 'other-side': { const cur = E.ex; if (cur && !run) { E.setExercise(E.mirror(cur)); E.setMode('loop'); } break; }
@@ -746,6 +907,7 @@
       else if (t.id === 's-count') { S.settings.count = t.checked; save(); }
       else if (t.id === 's-cues') { S.settings.cues = t.checked; save(); }
       else if (t.id === 's-warm') { S.settings.warm = t.checked; save(); }
+      else if (t.id === 's-listen') { S.settings.listen = t.checked; save(); Listen.sync(); }
       else if (t.id === 's-vsel') { S.settings.voiceURI = t.value; save(); Voice.pick(); }
     };
     v.oninput = (e) => {
@@ -803,6 +965,9 @@
     mq.addEventListener && mq.addEventListener('change', re);
     new MutationObserver(re).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     render();
+    if ('serviceWorker' in navigator && location.protocol === 'https:' && !/claude\.ai|claudeusercontent/.test(location.host)) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
   }
   window.CorpusApp = { startSession, preview, state, S };
   boot();

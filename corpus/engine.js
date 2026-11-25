@@ -43,7 +43,7 @@
     const out = curve.getPoints(48);
     out.unshift(new THREE.Vector2(0.0001, out[0].y));
     out.push(new THREE.Vector2(0.0001, out[out.length - 1].y));
-    const g = new THREE.LatheGeometry(out, segs);
+    const g = new THREE.LatheGeometry(out, segs, Math.PI, Math.PI * 2);
     const m = new THREE.Mesh(g, mat);
     m.scale.set(sx, 1, sz); m.castShadow = true; m.receiveShadow = true;
     return m;
@@ -71,18 +71,98 @@
       r -= 0.07 * (gs(eyeL, 0.16) + gs(eyeR, 0.16));
       r += (f ? 0.02 : 0.04) * (gs(browL, 0.17) + gs(browR, 0.17));
       r += 0.045 * (gs(chL, 0.24) + gs(chR, 0.24));
-      r += (f ? 0.05 : 0.08) * gs(chin, 0.2) + 0.025 * gs(lips, 0.13) - 0.012 * gs(philt, 0.06);
+      r += (f ? 0.035 : 0.06) * gs(chin, 0.24) + 0.025 * gs(lips, 0.13) - 0.012 * gs(philt, 0.06);
       let sx = 1, sz = 1;
       if (v.y < 0.05) {
         const k = 0.05 - v.y;
-        sx = 1 - (f ? 0.36 : 0.26) * k * k;
-        if (v.z < 0.2) sz = 1 - 0.32 * k * (0.2 - v.z);
+        sx = 1 - (f ? 0.24 : 0.16) * k * k;
+        if (v.z < 0.2) sz = 1 - 0.22 * k * (0.2 - v.z);
       }
       if (v.y > 0.3 && v.z < 0) sz *= 1 + 0.06 * (v.y - 0.3);
       p.setXYZ(i, v.x * r * sx * (f ? 0.08 : 0.082), v.y * r * (f ? 0.107 : 0.11), v.z * r * sz * 0.098);
     }
     g.computeVertexNormals();
     return g;
+  }
+
+  // Fusionne les pièces marquées en maillages « skinnés » (un par matière) qui se déforment avec le squelette.
+  function skinBody(b) {
+    const bones = [];
+    b.root.traverse((o) => { if (o.isBone) bones.push(o); });
+    const idx = new Map(bones.map((bn, i) => [bn, i]));
+    b.root.position.set(0, 0, 0); b.root.rotation.set(0, 0, 0);
+    b.root.updateMatrixWorld(true);
+    const parts = [];
+    b.root.traverse((o) => { if (o.isMesh && o.userData.sk) parts.push(o); });
+    const byMat = new Map();
+    for (const mesh of parts) {
+      const bone = mesh.parent, spec = mesh.userData.sk;
+      mesh.updateMatrix();
+      const g = mesh.geometry.index ? mesh.geometry.clone() : mesh.geometry.clone();
+      g.deleteAttribute('uv');
+      const pos = g.attributes.position, n = pos.count;
+      let ymax = -Infinity, ymin = Infinity;
+      for (let i = 0; i < n; i++) { const y = pos.getY(i); if (y > ymax) ymax = y; if (y < ymin) ymin = y; }
+      const si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
+      const up = spec.up ? b[spec.up] : null, dn = spec.down ? b[spec.down] : null;
+      const bu = spec.bu || 0.22, bd = spec.bd || 0.22;
+      for (let i = 0; i < n; i++) {
+        const t = (ymax - pos.getY(i)) / (ymax - ymin || 1);
+        const wu = up && t < bu ? 0.5 * (1 - t / bu) : 0;
+        const wd = dn && t > 1 - bd ? 0.5 * (t - (1 - bd)) / bd : 0;
+        si[i * 4] = idx.get(bone); sw[i * 4] = 1 - wu - wd;
+        si[i * 4 + 1] = up ? idx.get(up) : 0; sw[i * 4 + 1] = wu;
+        si[i * 4 + 2] = dn ? idx.get(dn) : 0; sw[i * 4 + 2] = wd;
+      }
+      g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+      g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+      if (spec.sculpt) {
+        g.applyMatrix4(mesh.matrix);
+        const p2 = g.attributes.position;
+        for (let i = 0; i < p2.count; i++) {
+          const x = p2.getX(i), y = p2.getY(i), z = p2.getZ(i);
+          const d = spec.sculpt(x, y, z);
+          if (d) p2.setXYZ(i, x + d[0], y + d[1], z + d[2]);
+        }
+        g.computeVertexNormals();
+        g.applyMatrix4(bone.matrixWorld);
+      } else g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(bone.matrixWorld, mesh.matrix));
+      bone.remove(mesh);
+      if (!byMat.has(mesh.material)) byMat.set(mesh.material, []);
+      byMat.get(mesh.material).push(g);
+    }
+    const skeleton = new THREE.Skeleton(bones);
+    const out = [];
+    for (const [mat, geos] of byMat) {
+      const geo = mergeGeos(geos);
+      const sm = new THREE.SkinnedMesh(geo, mat);
+      sm.castShadow = true; sm.receiveShadow = true; sm.frustumCulled = false;
+      sm.bind(skeleton, new THREE.Matrix4());
+      out.push(sm);
+    }
+    return out;
+  }
+  function mergeGeos(geos) {
+    let nv = 0, ni = 0;
+    for (const g of geos) { nv += g.attributes.position.count; ni += g.index ? g.index.count : g.attributes.position.count; }
+    const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), SI = new Uint16Array(nv * 4), SW = new Float32Array(nv * 4);
+    const I = new Uint32Array(ni);
+    let ov = 0, oi = 0;
+    for (const g of geos) {
+      const c = g.attributes.position.count;
+      P.set(g.attributes.position.array, ov * 3); N.set(g.attributes.normal.array, ov * 3);
+      SI.set(g.attributes.skinIndex.array, ov * 4); SW.set(g.attributes.skinWeight.array, ov * 4);
+      if (g.index) { const a = g.index.array; for (let k = 0; k < a.length; k++) I[oi + k] = a[k] + ov; oi += a.length; }
+      else { for (let k = 0; k < c; k++) I[oi + k] = ov + k; oi += c; }
+      ov += c;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(P, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
+    geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
+    geo.setIndex(new THREE.BufferAttribute(I, 1));
+    return geo;
   }
 
   /* ---------- Avatar ---------- */
@@ -110,52 +190,54 @@
       sock: fabricMat('#f4f3ef'),
     };
     const b = {}, markers = {};
-    const grp = (parent, x, y, z) => { const o = new THREE.Group(); o.position.set(x * S, y * S, z * S); parent.add(o); return o; };
+    const grp = (parent, x, y, z) => { const o = new THREE.Bone(); o.position.set(x * S, y * S, z * S); parent.add(o); return o; };
     const add = (parent, mesh) => { mesh.position.multiplyScalar(S); mesh.scale.multiplyScalar(S); parent.add(mesh); return mesh; };
     const mark = (name, parent, x, y, z, r) => { const o = new THREE.Object3D(); o.position.set(x * S, y * S, z * S); o.userData.r = r * S; parent.add(o); markers[name] = o; };
 
-    b.root = new THREE.Group();
+    // sk(mesh, haut, bas) : la pièce sera fusionnée dans un corps continu, avec un fondu de poids vers l'os du haut et du bas.
+    const sk = (mesh, up, down, bu, bd, sculpt) => { mesh.userData.sk = { up, down, bu, bd, sculpt }; return mesh; };
+    const bump = (x, y, z, cx, cy, cz, sg, a) => { const d2 = ((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2) / (sg * sg); return a * Math.exp(-d2); };
+    b.root = new THREE.Bone();
     b.spine = grp(b.root, 0, 0.09, 0);
     b.chest = grp(b.spine, 0, 0.15, 0);
     b.neck = grp(b.chest, 0, 0.225, 0);
-    b.head = grp(b.neck, 0, 0.085, 0);
+    b.head = grp(b.neck, 0, 0.072, 0);
 
     // Tronc
-    add(b.root, latheY([[-0.135, 0.03], [-0.12, 0.1], [-0.085, 0.152], [-0.02, f ? 0.168 : 0.158], [0.04, f ? 0.155 : 0.15], [0.1, f ? 0.128 : 0.138], [0.14, f ? 0.118 : 0.134]], M.bottom, 1, 0.72));
-    add(b.spine, latheY(f
+    sk(add(b.root, latheY([[-0.135, 0.03], [-0.12, 0.1], [-0.085, 0.152], [-0.02, f ? 0.168 : 0.158], [0.04, f ? 0.155 : 0.15], [0.1, f ? 0.128 : 0.138], [0.14, f ? 0.118 : 0.134]], M.bottom, 1, 0.72)), 'spine', null, 0.3, 0, (x, y, z) => {
+      if (z > -0.01) return null;
+      const a = f ? 0.05 : 0.032;
+      const k = bump(x, y, z, 0.06 * S, -0.055 * S, -0.1 * S, 0.075 * S, a * S) + bump(x, y, z, -0.06 * S, -0.055 * S, -0.1 * S, 0.075 * S, a * S);
+      return [0, -k * 0.25, -k];
+    });
+    sk(add(b.spine, latheY(f
       ? [[-0.06, 0.12], [0, 0.116], [0.06, 0.112], [0.12, 0.118], [0.17, 0.126]]
-      : [[-0.06, 0.135], [0, 0.134], [0.06, 0.133], [0.12, 0.14], [0.17, 0.148]], f ? M.skin : M.top, 1, 0.72));
-    add(b.chest, latheY(f
-      ? [[-0.06, 0.122], [0, 0.128], [0.07, 0.138], [0.14, 0.145], [0.19, 0.138], [0.225, 0.095], [0.245, 0.04]]
-      : [[-0.06, 0.142], [0, 0.152], [0.07, 0.166], [0.14, 0.178], [0.19, 0.172], [0.225, 0.115], [0.245, 0.05]], M.top, 1, f ? 0.64 : 0.62));
-    if (f) {
-      add(b.chest, ellipsoid(M.top, 0.056, 0.05, 0.04, 0.05, 0.1, 0.06));
-      add(b.chest, ellipsoid(M.top, 0.056, 0.05, 0.04, -0.05, 0.1, 0.06));
-      add(b.root, ellipsoid(M.bottom, 0.085, 0.085, 0.075, 0.064, -0.05, -0.05));
-      add(b.root, ellipsoid(M.bottom, 0.085, 0.085, 0.075, -0.064, -0.05, -0.05));
-    } else {
-      add(b.chest, ellipsoid(M.top, 0.078, 0.058, 0.045, 0.062, 0.12, 0.055));
-      add(b.chest, ellipsoid(M.top, 0.078, 0.058, 0.045, -0.062, 0.12, 0.055));
-      add(b.root, ellipsoid(M.bottom, 0.075, 0.08, 0.07, 0.062, -0.05, -0.05));
-      add(b.root, ellipsoid(M.bottom, 0.075, 0.08, 0.07, -0.062, -0.05, -0.05));
-      // trapèzes
-      add(b.chest, ellipsoid(M.top, 0.1, 0.035, 0.06, 0, 0.215, -0.02));
-    }
+      : [[-0.06, 0.135], [0, 0.134], [0.06, 0.133], [0.12, 0.14], [0.17, 0.148]], f ? M.skin : M.top, 1, 0.72)), 'chest', 'root', 0.3, 0.3);
+    sk(add(b.chest, latheY(f
+      ? [[-0.06, 0.122], [0, 0.128], [0.07, 0.138], [0.14, 0.145], [0.19, 0.138], [0.228, 0.1], [0.255, 0.062], [0.27, 0.03]]
+      : [[-0.06, 0.142], [0, 0.152], [0.07, 0.166], [0.14, 0.178], [0.19, 0.172], [0.228, 0.122], [0.255, 0.075], [0.27, 0.035]], M.top, 1, f ? 0.64 : 0.62)), null, 'spine', 0, 0.25, (x, y, z) => {
+      if (z < 0) return null;
+      const k = f
+        ? bump(x, y, z, 0.055 * S, 0.095 * S, 0.1 * S, 0.05 * S, 0.042 * S) + bump(x, y, z, -0.055 * S, 0.095 * S, 0.1 * S, 0.05 * S, 0.042 * S)
+        : bump(x, y, z, 0.065 * S, 0.13 * S, 0.11 * S, 0.07 * S, 0.018 * S) + bump(x, y, z, -0.065 * S, 0.13 * S, 0.11 * S, 0.07 * S, 0.018 * S);
+      return [0, -k * 0.2, k];
+    });
+    if (!f) add(b.chest, ellipsoid(M.top, 0.1, 0.035, 0.06, 0, 0.215, -0.02)); // trapèzes
     // Cou et tête
-    add(b.neck, latheY([[-0.04, f ? 0.05 : 0.06], [0.05, f ? 0.046 : 0.056], [0.1, f ? 0.045 : 0.055]], M.skin, 1, 0.95));
+    sk(add(b.neck, latheY([[-0.06, f ? 0.07 : 0.085], [0.0, f ? 0.055 : 0.067], [0.05, f ? 0.05 : 0.062], [0.1, f ? 0.048 : 0.058]], M.skin, 1, 0.92)), 'head', 'chest', 0.25, 0.35);
     const headMesh = new THREE.Mesh(headGeometry(f), M.skin);
     headMesh.position.set(0, 0.098, -0.004); headMesh.castShadow = true; add(b.head, headMesh);
     add(b.head, ellipsoid(M.skin, 0.011, 0.026, 0.017, 0.081, 0.092, -0.008));
     add(b.head, ellipsoid(M.skin, 0.011, 0.026, 0.017, -0.081, 0.092, -0.008));
     const lidG = new THREE.SphereGeometry(1, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.42);
     for (const x of [0.03, -0.03]) {
-      add(b.head, ellipsoid(M.eyeW, 0.0112, 0.0112, 0.0112, x, 0.109, 0.077));
-      add(b.head, ellipsoid(M.iris, 0.0058, 0.0058, 0.0025, x, 0.109, 0.0878));
+      add(b.head, ellipsoid(M.eyeW, 0.0124, 0.0118, 0.0118, x, 0.108, 0.0765));
+      add(b.head, ellipsoid(M.iris, 0.0068, 0.0068, 0.0028, x, 0.108, 0.0876));
       const lid = new THREE.Mesh(lidG, M.skin); lid.scale.set(0.0124, 0.0124, 0.0124); lid.position.set(x, 0.109, 0.0772); lid.rotation.x = 0.55; add(b.head, lid);
-      const brow = add(b.head, ellipsoid(M.hair, 0.016, 0.0026, 0.006, x * 1.07, 0.1265, 0.0905)); brow.rotation.z = x > 0 ? -0.14 : 0.14;
+      const brow = add(b.head, ellipsoid(M.hair, 0.0165, f ? 0.0026 : 0.0036, 0.006, x * 1.08, 0.127, 0.0905)); brow.rotation.z = x > 0 ? 0.05 : -0.05;
     }
-    add(b.head, ellipsoid(M.lip, 0.0165, 0.0042, 0.0065, 0, 0.0585, 0.0915));
-    add(b.head, ellipsoid(M.lip, 0.0155, 0.0052, 0.0072, 0, 0.0505, 0.0895));
+    add(b.head, ellipsoid(M.lip, 0.0205, 0.0045, 0.0068, 0, 0.0585, 0.0915));
+    add(b.head, ellipsoid(M.lip, 0.0185, f ? 0.0058 : 0.005, 0.0074, 0, 0.0505, 0.0895));
     // Cheveux : volume décalé vers l'arrière et le haut pour dégager le visage
     if (f) {
       add(b.head, ellipsoid(M.hair, 0.0855, 0.112, 0.103, 0, 0.121, -0.02));
@@ -178,22 +260,27 @@
       b['kn' + s] = grp(b['hipt' + s], 0, -TH, 0);
       b['an' + s] = grp(b['kn' + s], 0, -SH, 0);
 
-      // bras
-      add(b['sht' + s], ellipsoid(f ? M.skin : M.top, f ? 0.05 : 0.057, f ? 0.055 : 0.062, f ? 0.05 : 0.056, 0.004 * m, -0.012, 0));
-      add(b['sht' + s], limb(UA, [[0, 0.047], [0.1, 0.046], [0.42, 0.042], [0.75, 0.034], [1, 0.031]], M.skin, f ? 1 : 1.2, 1, 1.02));
-      if (!f) add(b['sht' + s], limb(UA * 0.42, [[0, 0.057], [0.6, 0.059], [1, 0.058]], M.top));
-      add(b['el' + s], ellipsoid(M.skin, f ? 0.031 : 0.036, f ? 0.031 : 0.036, f ? 0.031 : 0.036));
-      add(b['el' + s], limb(FA, [[0, 0.033], [0.18, 0.036], [0.55, 0.029], [1, 0.021]], M.skin, f ? 1 : 1.16, 1.06, 0.92));
-      add(b['wr' + s], ellipsoid(M.skin, 0.018, 0.048, 0.037, 0, -0.045, 0));
-      add(b['wr' + s], ellipsoid(M.skin, 0.015, 0.046, 0.033, 0, -0.1, 0.003));
-      const th = add(b['wr' + s], ellipsoid(M.skin, 0.011, 0.03, 0.012, -0.004 * m, -0.04, 0.034)); th.rotation.x = 0.55;
+      // bras : épaule, biceps et avant-bras d'un seul tenant, mains avec doigts
+      const ar = f ? 1.16 : 1.38;
+      sk(add(b['sht' + s], limb(UA, [[-0.16, 0.012], [-0.11, 0.04], [-0.03, 0.053], [0.08, 0.05], [0.3, 0.045], [0.55, 0.041], [0.82, 0.034], [1, 0.031]], f ? M.skin : M.skin, ar, 1, 1.02)), 'cl' + s, 'el' + s, 0.3, 0.2);
+      if (!f) sk(add(b['sht' + s], limb(UA * 0.45, [[-0.46, 0.012], [-0.36, 0.05], [-0.18, 0.07], [0.3, 0.072], [0.7, 0.069], [1, 0.067]], M.top)), 'cl' + s, null, 0.35, 0);
+      sk(add(b['el' + s], limb(FA, [[-0.06, 0.03], [0.05, 0.034], [0.22, 0.037], [0.55, 0.03], [0.88, 0.022], [1, 0.021]], M.skin, f ? 1.12 : 1.3, 1.06, 0.92)), 'sht' + s, 'wr' + s, 0.22, 0.2);
+      add(b['wr' + s], ellipsoid(M.skin, 0.017, 0.042, 0.036, 0, -0.045, 0.002));
+      for (let k = 0; k < 4; k++) {
+        const z = 0.024 - k * 0.016, L = [0.072, 0.08, 0.076, 0.062][k];
+        const fg = add(b['wr' + s], limb(L, [[0, 0.0085], [0.5, 0.0078], [0.9, 0.0068], [1, 0.004]], M.skin));
+        fg.position.set(-0.002 * m * S, -0.078 * S, z * S); fg.rotation.x = -0.05 * (k - 1.5); fg.rotation.z = 0.12 * m;
+      }
+      const th = add(b['wr' + s], limb(0.058, [[0, 0.011], [0.6, 0.009], [1, 0.005]], M.skin));
+      th.position.set(-0.008 * m * S, -0.03 * S, 0.03 * S); th.rotation.x = 0.75; th.rotation.z = 0.25 * m;
 
-      // jambes
-      add(b['hipt' + s], limb(TH, [[0, 0.088], [0.12, 0.091], [0.45, 0.078], [0.8, 0.057], [1, 0.049]], f ? M.bottom : M.skin, f ? 1.03 : 1.02));
-      if (!f) add(b['hipt' + s], limb(TH * 0.55, [[-0.05, 0.094], [0.4, 0.092], [1, 0.084]], M.bottom, 1.04));
-      add(b['kn' + s], ellipsoid(f ? M.bottom : M.skin, 0.05, 0.052, 0.05));
-      add(b['kn' + s], limb(SH, [[0, 0.049], [0.15, 0.051], [0.38, 0.049], [0.72, 0.035], [1, 0.03]], f ? M.bottom : M.skin));
-      add(b['kn' + s], ellipsoid(f ? M.bottom : M.skin, 0.044, 0.1, 0.045, 0, -0.13, -0.022));
+      // jambes : hanche, genou et cheville fondus dans la peau
+      sk(add(b['hipt' + s], limb(TH, [[-0.08, 0.06], [0, 0.088], [0.12, 0.091], [0.45, 0.078], [0.8, 0.056], [0.95, 0.05], [1.03, 0.047]], f ? M.bottom : M.skin, f ? 1.03 : 1.02)), 'root', 'kn' + s, 0.25, 0.18);
+      if (!f) sk(add(b['hipt' + s], limb(TH * 0.52, [[-0.12, 0.07], [0, 0.096], [0.5, 0.09], [1, 0.08]], M.bottom, 1.03)), 'root', null, 0.3, 0);
+      sk(add(b['kn' + s], limb(SH, [[-0.04, 0.047], [0.04, 0.05], [0.16, 0.052], [0.36, 0.05], [0.7, 0.036], [0.92, 0.03], [1.02, 0.03]], f ? M.bottom : M.skin)), 'hipt' + s, 'an' + s, 0.2, 0.15, (x, y, z) => {
+        const k = z < 0 ? bump(x, y, z, 0, -0.13 * S, -0.05 * S, 0.075 * S, 0.02 * S) : bump(x, y, z, 0, 0.0, 0.05 * S, 0.035 * S, 0.008 * S);
+        return z < 0 ? [0, 0, -k] : [0, 0, k];
+      });
       if (!f) add(b['kn' + s], limb(0.07, [[0, 0.036], [1, 0.034]], M.sock)).position.y = -0.33 * S;
       add(b['an' + s], ellipsoid(M.shoe, 0.047, 0.044, 0.125, 0, -0.033, 0.046));
       add(b['an' + s], ellipsoid(M.sole, 0.051, 0.016, 0.132, 0, -0.064, 0.047));
@@ -217,7 +304,8 @@
     mark('chestF', b.chest, 0, 0.1, 0.05, 0.088);
     mark('headM', b.head, 0, 0.095, 0, 0.105);
 
-    const rig = { b, markers, S, f, M, lens: { UA, FA, TH, SH } };
+    const skinned = skinBody(b);
+    const rig = { b, markers, S, f, M, skinned, lens: { UA, FA, TH, SH } };
     // Queue de cheval (simulée)
     if (f) {
       const tail = new THREE.Group();
@@ -753,10 +841,12 @@
   E.setAvatar = function (cfg) {
     if (E.rig) {
       avatarHolder.remove(E.rig.b.root);
+      for (const sm of E.rig.skinned) avatarHolder.remove(sm);
       if (E.rig.tail) scene.remove(E.rig.tail.group);
     }
     E.rig = buildAvatar(cfg);
     avatarHolder.add(E.rig.b.root);
+    for (const sm of E.rig.skinned) avatarHolder.add(sm);
     if (E.rig.tail) scene.add(E.rig.tail.group);
     if (E.ex) E.setExercise(E.ex, { keepPhase: true, noBlend: true });
   };

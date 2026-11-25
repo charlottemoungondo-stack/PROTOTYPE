@@ -6,6 +6,10 @@
 <meta name="theme-color" content="#2f56e0">
 <title>Corpus Coach</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Corpus">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Instrument+Sans:wght@400;500;600;700&display=swap">
@@ -36,7 +40,7 @@ button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .num { font-family: var(--f-display); font-variant-numeric: tabular-nums; }
 
-.app { height: 100%; display: grid; grid-template-rows: auto 1fr; }
+.app { height: 100%; display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); }
 .topbar { display: flex; align-items: center; gap: 14px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); background: var(--surface); }
 .brand { display: flex; align-items: baseline; gap: 8px; margin-right: auto; }
 .brand b { font-family: var(--f-display); font-stretch: 125%; font-weight: 850; font-size: 22px; letter-spacing: -.01em; }
@@ -189,7 +193,8 @@ button { cursor: pointer; }
 
 @media (max-width: 980px) {
   .app { height: auto; min-height: 100%; }
-  .layout { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .panel, .stage { min-width: 0; }
   .stage { height: 62svh; min-height: 420px; position: sticky; top: 0; z-index: 3; }
   .panel { border-left: 0; overflow: visible; }
   .tabs { top: 0; }
@@ -260,7 +265,8 @@ button { cursor: pointer; }
     </section>
     <aside class="panel" id="panel">
       <nav class="tabs" role="tablist" aria-label="Sections">
-        <button role="tab" data-tab="seances" aria-selected="true">Séances</button>
+        <button role="tab" data-tab="accueil" aria-selected="true">Accueil</button>
+        <button role="tab" data-tab="seances" aria-selected="false">Séances</button>
         <button role="tab" data-tab="exercices" aria-selected="false">Exercices</button>
         <button role="tab" data-tab="defis" aria-selected="false">Défis</button>
         <button role="tab" data-tab="progres" aria-selected="false">Progrès</button>
@@ -276,6 +282,7 @@ button { cursor: pointer; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
 <script src="data.js"></script>
+<script src="tips.js"></script>
 <script src="engine.js"></script>
 <script src="app.js"></script>
 </body>
