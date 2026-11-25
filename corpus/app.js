@@ -241,6 +241,7 @@
     } else {
       const ex = state.previewEx;
       c.innerHTML = `${vol}<button class="btn accent" id="c-try">${I.play} Faire 1 série</button>`;
+      if (!S.profile) $('#c-try').hidden = true;
       $('#c-try').onclick = () => startSession({ title: ex.name, items: [{ ex, sets: 1, n: ex.def.reps || ex.def.secs }], quick: true });
     }
     $('#c-voice').onclick = () => { S.settings.voice = !S.settings.voice; if (!S.settings.voice) Voice.stop(); save(); renderControls(); if (state.tab === 'reglages') render(); };
@@ -500,6 +501,7 @@
     $('#strip').hidden = true; $('#counter').hidden = true;
     if (r.reps > 0 || complete) {
       S.history.push({ date: ymd(), title: r.plan.title, min: mins, reps: r.reps, ex: r.done.length, complete });
+      if (complete && r.plan.perso !== undefined && S.plan) S.planIdx = ((S.planIdx || 0) + 1) % S.plan.sessions.length;
       if (complete && r.plan.challenge) {
         const c = S.challenges[r.plan.challenge.id];
         if (c && !c.done.includes(r.plan.challenge.day)) c.done.push(r.plan.challenge.day);
@@ -522,7 +524,12 @@
   }
 
   /* ---------- Panneau ---------- */
-  function setTab(t) { state.tab = t; state.exDetail = null; state.confirm = null; state.tip = null; render(); $('#panel').scrollTop = 0; }
+  function lockTabs() {
+    const locked = !S.profile;
+    $$('.tabs button').forEach((bt) => { if (bt.dataset.tab !== 'accueil') { bt.disabled = locked; bt.style.opacity = locked ? '.4' : ''; } });
+    const tryB = $('#c-try'); if (tryB) tryB.hidden = locked;
+  }
+  function setTab(t) { if (!S.profile && t !== 'accueil') { toast('Termine ton bilan pour accéder aux entraînements.'); return; } state.tab = t; state.exDetail = null; state.confirm = null; state.tip = null; render(); $('#panel').scrollTop = 0; }
   function render() {
     $$('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === state.tab)));
     const v = $('#view');
@@ -559,9 +566,24 @@
 
   /* ---------- Profil & accueil ---------- */
   const GOALS = [
-    ['ventre', 'Perdre du ventre'], ['fessiers', 'Galber les fessiers'], ['muscle', 'Prendre du muscle'], ['forme', 'Garder la forme'],
-    ['souplesse', 'Souplesse et dos'], ['running', 'Courir mieux'], ['grossesse', 'Sport pendant la grossesse'], ['senior', 'Bouger en douceur'],
+    ['ventre', 'Perdre du poids et du ventre'], ['fessiers', 'Tonifier et sculpter ma silhouette'], ['muscle', 'Prendre du muscle'], ['force', 'Devenir plus fort(e)'],
+    ['forme', 'Être en forme et en bonne santé'], ['souplesse', 'Souplesse, dos et posture'], ['running', 'Mieux courir'],
+    ['grossesse', 'Rester active pendant ma grossesse'], ['senior', 'Bouger en douceur (seniors)'],
   ];
+  const FOCUS = [
+    ['bras', 'Bras', ['biceps', 'triceps', 'avantbras']], ['pecs', 'Pectoraux', ['pectoraux']], ['epaules', 'Épaules', ['epaules', 'trapezes']],
+    ['dos', 'Dos', ['dos', 'lombaires']], ['ventre', 'Ventre', ['abdos']], ['taille', 'Taille', ['obliques']],
+    ['fessiers', 'Fessiers', ['fessiers', 'abducteurs']], ['cuisses', 'Cuisses', ['quadriceps', 'ischios', 'adducteurs']],
+    ['mollets', 'Mollets', ['mollets', 'tibias']], ['cou', 'Cou et posture', ['cou', 'trapezes']], ['cardio', 'Endurance et cardio', ['cardio']],
+  ];
+  const PAINS = [['genoux', 'Genoux'], ['dos', 'Bas du dos'], ['epaules', 'Épaules'], ['poignets', 'Poignets'], ['cou', 'Nuque']];
+  const AVOID = {
+    genoux: ['squat-saute', 'burpees', 'fente-bulgare', 'jumping-jacks', 'montees-genoux', 'fente', 'fentes-alternees', 'leg-extension'],
+    dos: ['souleve-terre', 'good-morning', 'sdt-roumain', 'kb-swing', 'superman', 'russian-twist', 'releves-jambes', 'swimming', 'hundred', 'cobra'],
+    epaules: ['developpe-militaire', 'pompes-piquees', 'tractions', 'dips-chaise', 'extension-triceps', 'developpe-couche', 'suspension'],
+    poignets: ['pompes', 'pompes-genoux', 'pompes-inclinees', 'mountain-climbers', 'burpees', 'curl-poignets', 'pompes-piquees', 'chat-vache', 'bird-dog', 'donkey-kick', 'fire-hydrant'],
+    cou: ['shrugs', 'cou-flexion'],
+  };
   const LEVELS = [['debutant', 'Débutant(e)'], ['inter', 'Intermédiaire'], ['avance', 'Avancé(e)']];
   const GOAL_PLAN = {
     ventre: { progs: ['ventre', 'hiit', 'pilates', 'full-maison'], ch: 'ventre52', tips: ['ventre', 'regularite', 'sommeil'] },
@@ -572,7 +594,86 @@
     running: { progs: ['running', 'etirements', 'hiit', 'full-maison'], ch: 'squat30', tips: ['running', 'recup', 'sommeil'] },
     grossesse: { progs: ['grossesse', 'etirements'], ch: null, tips: ['grossesse', 'respiration', 'eau'] },
     senior: { progs: ['seniors', 'reveil', 'etirements', 'dos-cou'], ch: null, tips: ['seniors', 'echauffement', 'regularite'] },
+    force: { progs: ['force-salle', 'pecs', 'bras', 'full-maison'], ch: 'bras21', tips: ['muscle', 'recup', 'sommeil'] },
   };
+
+  /* ---------- Programme personnalisé ---------- */
+  function levelFromTest(d) {
+    const sc = (d.tPush || 0) + (d.tSquat || 0) + (d.tPlank || 0) + (d.tAct || 0);
+    return sc <= 3 ? 'debutant' : sc <= 7 ? 'inter' : 'avance';
+  }
+  function exAllowed(e, pr) {
+    if (e.stretch) return false;
+    const place = pr.place || 'maison';
+    if (place === 'maison' && !e.place.includes('maison')) return false;
+    const eq = pr.equip || [];
+    if (place === 'maison') {
+      if (e.equip.includes('haltères') && !eq.includes('halteres')) return false;
+      if (e.equip.includes('kettlebell') && !eq.includes('kettlebell')) return false;
+      if (e.equip.includes('barre de traction') && !eq.includes('traction')) return false;
+      if (e.equip.includes('banc') && !eq.includes('banc')) return false;
+    }
+    for (const pn of pr.pains || []) if ((AVOID[pn] || []).includes(e.id)) return false;
+    const maxLvl = pr.level === 'debutant' ? 1 : pr.level === 'inter' ? 2 : 3;
+    if (e.level > maxLvl) return false;
+    if (pr.goal === 'grossesse' && !e.aud.includes('prenatal')) return false;
+    if (pr.goal === 'senior' && !(e.aud.includes('senior') || e.aud.includes('mobilite') || e.level === 1)) return false;
+    if (pr.goal === 'senior' && e.zones.includes('cardio') && !e.aud.includes('senior')) return false;
+    return true;
+  }
+  function dosage(e, pr) {
+    const g = pr.goal, lv = pr.level;
+    if (e.hold) { const secs = lv === 'debutant' ? 25 : lv === 'inter' ? 40 : 55; return { sets: lv === 'debutant' ? 2 : 3, n: secs }; }
+    const alt = e.count && e.count.length > 1 ? 2 : 1;
+    let sets = 3, n = 12;
+    if (g === 'muscle' || g === 'force') { sets = lv === 'debutant' ? 3 : 4; n = g === 'force' ? 6 : 10; }
+    else if (g === 'ventre') { sets = 3; n = 15; }
+    else if (g === 'fessiers') { sets = lv === 'debutant' ? 3 : 4; n = 12; }
+    else if (g === 'senior' || g === 'grossesse') { sets = 2; n = 10; }
+    if (e.zones.includes('cardio')) n = lv === 'debutant' ? 20 : 30;
+    if (lv === 'debutant') n = Math.round(n * 0.8);
+    if (lv === 'avance' && g !== 'force') n = Math.round(n * 1.2);
+    return { sets, n: n * (alt > 1 && !e.zones.includes('cardio') ? 1 : 1) };
+  }
+  function buildPlan(pr) {
+    const pool = EX.filter((e) => exAllowed(e, pr));
+    const focusZones = (pr.focus || []).flatMap((f) => (FOCUS.find((x) => x[0] === f) || [, , []])[2]);
+    const perSession = { 10: 3, 20: 5, 30: 6, 45: 8, 60: 10 }[pr.minutes || 30] || 6;
+    const balance = [['quadriceps', 'fessiers'], ['dos'], ['abdos'], ['pectoraux', 'epaules'], ['ischios', 'mollets'], ['obliques', 'lombaires']];
+    const wantCardio = pr.goal === 'ventre' || (pr.focus || []).includes('cardio');
+    const sessions = [];
+    const nS = Math.min(pr.freq || 3, 4);
+    const used = new Map();
+    const pick = (zones, k, avoid) => {
+      const cands = pool.filter((e) => e.zones.some((z) => zones.includes(z)) && !avoid.has(e.id))
+        .sort((a, b) => (used.get(a.id) || 0) - (used.get(b.id) || 0) || (b.zones.filter((z) => zones.includes(z)).length - a.zones.filter((z) => zones.includes(z)).length));
+      return cands.slice(0, k);
+    };
+    for (let si = 0; si < nS; si++) {
+      const chosen = new Set(), items = [];
+      const add = (e) => { if (!e || chosen.has(e.id)) return; chosen.add(e.id); used.set(e.id, (used.get(e.id) || 0) + 1); items.push({ id: e.id, ...dosage(e, pr) }); };
+      const nFocus = focusZones.length ? Math.ceil(perSession * 0.6) : 0;
+      // zones prioritaires, en tournant d'une séance à l'autre
+      const fz = (pr.focus || []).map((f) => (FOCUS.find((x) => x[0] === f) || [, , []])[2]);
+      for (let k = 0; k < nFocus; k++) { const zones = fz.length ? fz[(k + si) % fz.length] : []; for (const e of pick(zones, 1, chosen)) add(e); }
+      // équilibre du corps entier
+      let b = si;
+      while (items.length < perSession - (wantCardio ? 1 : 0) && b < si + 12) { for (const e of pick(balance[b % balance.length], 1, chosen)) add(e); b++; }
+      if (wantCardio) for (const e of pick(['cardio'], 1, chosen)) add(e);
+      while (items.length < perSession) { const e = pool.find((x) => !chosen.has(x.id)); if (!e) break; add(e); }
+      const letter = 'ABCD'[si];
+      const fl = FOCUS.filter(([k, , zs]) => (pr.focus || []).includes(k) && items.some((it) => byId[it.id].zones.some((z) => zs.includes(z)))).map((x) => x[1]);
+      const zonesTxt = (fl.length ? fl : [...new Set(items.flatMap((it) => byId[it.id].zones))].filter((z) => z !== 'cardio').map((z) => zoneLabel[z])).slice(0, 3).join(', ') + (fl.length ? ' et corps complet' : '');
+      sessions.push({ id: 'perso-' + letter, title: `Séance ${letter} · ${zonesTxt}`, items });
+    }
+    return { sessions, created: ymd() };
+  }
+  function bmiInfo(pr) {
+    if (!pr.height || !pr.weight) return null;
+    const v = pr.weight / Math.pow(pr.height / 100, 2);
+    const cat = v < 18.5 ? 'en dessous de la zone de référence' : v < 25 ? 'dans la zone de référence' : v < 30 ? 'au-dessus de la zone de référence (surpoids)' : 'nettement au-dessus de la zone de référence';
+    return { v: Math.round(v * 10) / 10, cat };
+  }
   const needsDumbbells = (p) => p.items.some((it) => byId[it.id].equip.includes('haltères'));
   function recoPrograms() {
     const pr = S.profile; if (!pr) return [];
@@ -583,6 +684,12 @@
     return list;
   }
   function todayPlan() {
+    if (S.plan && S.plan.sessions && S.plan.sessions.length) {
+      const i = (S.planIdx || 0) % S.plan.sessions.length;
+      const ses = S.plan.sessions[i];
+      const anyCh = CHALLENGES.find((c) => S.challenges[c.id] && chDay(c) >= 1);
+      if (!anyCh) return { kind: 'perso', ses, idx: i, done: S.history.some((h) => h.date === ymd() && h.complete) };
+    }
     for (const c of CHALLENGES) {
       const st = S.challenges[c.id]; if (!st) continue;
       const day = chDay(c); if (day < 1) continue;
@@ -598,21 +705,98 @@
     const start = ymd(d);
     return S.history.filter((h) => h.date >= start).length;
   }
-  function viewOnboarding() {
-    const pr = S.profile || { name: '', sex: 'f', goal: 'ventre', level: 'debutant', freq: 3, place: S.place, dumbbells: false };
-    const chip = (k, v, l) => `<button class="chip" data-pf="${k}" data-v="${v}" aria-pressed="${String(pr[k]) === String(v)}">${l}</button>`;
-    state.draft = state.draft || Object.assign({}, pr);
-    const d = state.draft;
-    const dchip = (k, v, l) => `<button class="chip" data-pf="${k}" data-v="${v}" aria-pressed="${String(d[k]) === String(v)}">${l}</button>`;
-    return `<div><h2>${S.profile ? 'Ton profil' : 'Bienvenue sur Corpus'}</h2><p class="lead">Quelques questions pour que ton coach te prépare le bon programme.</p></div>
-      <div class="form" style="grid-template-columns:1fr"><label>Ton prénom (facultatif)<input id="pf-name" value="${esc(d.name || '')}" autocomplete="given-name" placeholder="Ex. Charlotte"></label></div>
-      <div class="setting"><span>Tu es</span><div class="chips">${dchip('sex', 'f', 'Une femme')}${dchip('sex', 'm', 'Un homme')}</div></div>
-      <div class="setting"><span>Ton objectif principal</span><div class="chips">${GOALS.map(([k, l]) => dchip('goal', k, l)).join('')}</div></div>
-      <div class="setting"><span>Ton niveau</span><div class="chips">${LEVELS.map(([k, l]) => dchip('level', k, l)).join('')}</div></div>
-      <div class="setting"><span>Séances par semaine</span><div class="chips">${[2, 3, 4, 5, 6].map((n) => dchip('freq', n, String(n))).join('')}</div></div>
-      <div class="setting"><span>Tu t'entraînes surtout</span><div class="chips">${dchip('place', 'maison', 'À la maison')}${dchip('place', 'salle', 'En salle')}</div></div>
-      <div class="setting"><span>Tu as des haltères ?</span><div class="chips">${dchip('dumbbells', true, 'Oui')}${dchip('dumbbells', false, 'Non')}</div></div>
-      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn accent" data-act="save-profile">${S.profile ? 'Enregistrer' : 'Créer mon programme'}</button>${S.profile ? '<button class="btn ghost" data-act="cancel-profile">Annuler</button>' : ''}</div>`;
+  /* ---------- Questionnaire d'inscription (une question par écran) ---------- */
+  const WIZ = ['bienvenue', 'sexe', 'age', 'mesures', 'objectif', 'zones', 'test', 'dispo', 'materiel', 'sante', 'analyse'];
+  function wizChips(key, opts, multi) {
+    const d = state.wiz.d, cur = d[key];
+    return `<div class="chips">${opts.map(([v, l]) => {
+      const on = multi ? (cur || []).includes(v) : String(cur) === String(v);
+      return `<button class="chip" data-wz="${key}" data-v="${v}" data-multi="${multi ? 1 : 0}" aria-pressed="${on}">${l}</button>`;
+    }).join('')}</div>`;
+  }
+  function wizValid(step, d) {
+    switch (step) {
+      case 'sexe': return !!d.sex;
+      case 'age': return !!d.age;
+      case 'objectif': return !!d.goal;
+      case 'zones': return (d.focus || []).length > 0;
+      case 'test': return d.tPush !== undefined && d.tSquat !== undefined && d.tPlank !== undefined && d.tAct !== undefined;
+      case 'dispo': return !!d.freq && !!d.minutes;
+      case 'materiel': return !!d.place;
+      case 'sante': return !!d.okHealth;
+      default: return true;
+    }
+  }
+  function viewWizard() {
+    if (!state.wiz) state.wiz = { i: 0, d: S.profile ? JSON.parse(JSON.stringify(S.profile)) : { equip: [], pains: [], focus: [] } };
+    const W = state.wiz, d = W.d, step = WIZ[W.i];
+    const pct = Math.round(W.i / (WIZ.length - 1) * 100);
+    const f = d.sex === 'f';
+    let body = '';
+    switch (step) {
+      case 'bienvenue': body = `<h2>Bienvenue sur Corpus</h2><p class="lead">Avant de t'entraîner, ton coach fait ton bilan : ton objectif, les zones que tu veux travailler, ton niveau, ton temps et ta santé. Ça prend deux minutes, et ton programme sera fait pour toi.</p>
+        <div class="form" style="grid-template-columns:1fr"><label>Ton prénom<input id="wz-name" value="${esc(d.name || '')}" autocomplete="given-name" placeholder="Ex. Charlotte" maxlength="30"></label></div>
+        <p class="note">L'application est gratuite. Tes réponses restent sur ton appareil.</p>`; break;
+      case 'sexe': body = `<h2>Tu es…</h2><p class="lead">Les programmes et les conseils s'adaptent à ta morphologie.</p>${wizChips('sex', [['f', 'Une femme'], ['m', 'Un homme']])}`; break;
+      case 'age': body = `<h2>Quel âge as-tu ?</h2>${wizChips('age', [['18', '18 à 29 ans'], ['30', '30 à 44 ans'], ['45', '45 à 59 ans'], ['60', '60 à 69 ans'], ['70', '70 ans et plus']])}<p class="note">Corpus est réservé aux personnes majeures.</p>`; break;
+      case 'mesures': body = `<h2>Ta taille et ton poids</h2><p class="lead">Facultatif : ça permet de suivre ta progression et d'adapter les conseils.</p>
+        <div class="form"><label>Taille (cm)<input type="number" id="wz-height" inputmode="numeric" min="120" max="230" value="${d.height || ''}"></label><label>Poids (kg)<input type="number" id="wz-weight" inputmode="decimal" min="30" max="250" step="0.1" value="${d.weight || ''}"></label></div>`; break;
+      case 'objectif': body = `<h2>Ton objectif principal</h2><p class="lead">Choisis celui qui compte le plus pour toi.</p>${wizChips('goal', GOALS.filter(([k]) => k !== 'grossesse' || f))}`; break;
+      case 'zones': {
+        const order = f ? ['fessiers', 'ventre', 'cuisses', 'taille', 'bras', 'dos', 'epaules', 'pecs', 'mollets', 'cou', 'cardio'] : ['bras', 'pecs', 'epaules', 'dos', 'ventre', 'cuisses', 'fessiers', 'taille', 'mollets', 'cou', 'cardio'];
+        body = `<h2>Quelles zones veux-tu travailler en priorité ?</h2><p class="lead">Choisis jusqu'à quatre zones. Le reste du corps sera aussi entraîné pour rester équilibré.</p>${wizChips('focus', order.map((k) => [k, FOCUS.find((x) => x[0] === k)[1]]), true)}`; break;
+      }
+      case 'test': body = `<h2>Petit test de niveau</h2><p class="lead">Réponds honnêtement : ton coach calcule ton niveau à partir de tes réponses.</p>
+        <div class="setting"><span>Combien de pompes d'affilée (sur les genoux, ça compte)</span>${wizChips('tPush', [[0, 'Aucune'], [1, '1 à 5'], [2, '6 à 15'], [3, 'Plus de 15']])}</div>
+        <div class="setting"><span>Combien de squats sans t'arrêter</span>${wizChips('tSquat', [[0, 'Moins de 10'], [1, '10 à 25'], [2, '25 à 50'], [3, 'Plus de 50']])}</div>
+        <div class="setting"><span>Combien de temps en planche</span>${wizChips('tPlank', [[0, 'Moins de 20 s'], [1, '20 à 45 s'], [2, '45 s à 1 min 30'], [3, 'Plus de 1 min 30']])}</div>
+        <div class="setting"><span>Ton activité actuelle</span>${wizChips('tAct', [[0, 'Je ne fais pas de sport'], [1, '1 à 2 fois par semaine'], [2, '3 fois ou plus par semaine']])}</div>`; break;
+      case 'dispo': body = `<h2>Ton temps disponible</h2>
+        <div class="setting"><span>Séances par semaine</span>${wizChips('freq', [[2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']])}</div>
+        <div class="setting"><span>Durée d'une séance</span>${wizChips('minutes', [[10, '10 min'], [20, '20 min'], [30, '30 min'], [45, '45 min'], [60, '1 heure']])}</div>`; break;
+      case 'materiel': body = `<h2>Où et avec quoi ?</h2>
+        <div class="setting"><span>Tu t'entraînes</span>${wizChips('place', [['maison', 'À la maison'], ['salle', 'En salle de sport']])}</div>
+        ${d.place === 'maison' ? `<div class="setting"><span>Ton matériel à la maison</span>${wizChips('equip', [['halteres', 'Haltères'], ['kettlebell', 'Kettlebell'], ['traction', 'Barre de traction'], ['banc', 'Banc']], true)}<p class="note">Pas de matériel ? Aucun problème : une chaise, un mur et un tapis suffisent.</p></div>` : ''}`; break;
+      case 'sante': body = `<h2>Ta santé</h2><p class="lead">As-tu des douleurs ou des zones fragiles ? Ton coach évitera les mouvements qui pourraient les aggraver.</p>
+        ${wizChips('pains', PAINS, true)}
+        ${d.goal === 'grossesse' ? '<div class="safety">Pendant la grossesse, demande l\'accord de ta sage-femme ou de ton médecin. Le programme évite les exercices allongés sur le dos, les sauts et le gainage intense.</div>' : ''}
+        <label class="toggle card" style="margin-top:6px">Je confirme être en état de pratiquer une activité physique, ou avoir demandé l'avis d'un médecin en cas de doute.<input type="checkbox" id="wz-ok" ${d.okHealth ? 'checked' : ''}></label>`; break;
+      case 'analyse': body = viewAnalysis(d); break;
+    }
+    const last = W.i === WIZ.length - 1;
+    return `<div class="bar-track" aria-label="Progression du bilan"><b style="width:${pct}%"></b></div>
+      <div class="note">Bilan · étape ${W.i + 1} sur ${WIZ.length}</div>
+      ${body}
+      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        ${W.i > 0 ? `<button class="btn ghost" data-act="wz-back">${I.back} Retour</button>` : ''}
+        ${last ? `<button class="btn accent" data-act="wz-finish">${I.play} Commencer mon programme</button>` : `<button class="btn accent" data-act="wz-next" ${wizValid(step, d) ? '' : 'disabled style="opacity:.5"'}>Continuer</button>`}
+        ${S.profile && !last ? '<button class="btn ghost" data-act="cancel-profile">Annuler</button>' : ''}
+      </div>`;
+  }
+  function viewAnalysis(d) {
+    d.level = levelFromTest(d);
+    d.dumbbells = (d.equip || []).includes('halteres') || d.place === 'salle';
+    const plan = buildPlan(d);
+    state.wiz.plan = plan;
+    const bmi = bmiInfo(d);
+    const lvl = (LEVELS.find((l) => l[0] === d.level) || [, ''])[1];
+    const goal = (GOALS.find((g) => g[0] === d.goal) || [, ''])[1];
+    const focus = (d.focus || []).map((k) => FOCUS.find((x) => x[0] === k)[1]).join(', ');
+    const pains = (d.pains || []).map((k) => PAINS.find((x) => x[0] === k)[1].toLowerCase());
+    const days = { 2: 'lundi et jeudi', 3: 'lundi, mercredi et vendredi', 4: 'lundi, mardi, jeudi et vendredi', 5: 'du lundi au vendredi', 6: 'du lundi au samedi' }[d.freq];
+    const ch = GOAL_PLAN[d.goal] && GOAL_PLAN[d.goal].ch && CHALLENGES.find((c) => c.id === GOAL_PLAN[d.goal].ch);
+    return `<h2>Ton analyse${d.name ? ', ' + esc(d.name) : ''}</h2>
+      <div class="stats">
+        <div class="stat"><div class="k">Niveau estimé</div><div class="v" style="font-size:22px">${esc(lvl)}</div></div>
+        <div class="stat"><div class="k">Rythme</div><div class="v" style="font-size:22px">${d.freq} × ${d.minutes} min</div></div>
+      </div>
+      <div class="card"><h3>Ton objectif</h3><p class="lead" style="margin:0">${esc(goal)}. Priorités : ${esc(focus)}.</p>
+        ${bmi ? `<p class="note" style="margin:0">Indice de masse corporelle : <b>${bmi.v}</b>, ${bmi.cat}. C'est un repère général, qui ne tient pas compte de ta masse musculaire.</p>` : ''}
+        ${pains.length ? `<p class="note" style="margin:0">Zones fragiles prises en compte : ${esc(pains.join(', '))}. Les mouvements à risque sont retirés de ton programme.</p>` : ''}</div>
+      <div class="card"><h3>Ton programme sur mesure</h3><p class="note" style="margin:0">${d.freq} séances par semaine, idéalement ${days}. Les séances tournent : ${plan.sessions.map((x) => x.title.split(' · ')[0]).join(', ')}.</p>
+        ${plan.sessions.map((ses) => `<details><summary><b>${esc(ses.title)}</b> · ${ses.items.length} exercices</summary><ul class="ex-list">${ses.items.map((it) => { const e = byId[it.id]; return `<li><div class="ex-row"><div><div class="n">${esc(e.name)}</div><div class="z">${e.zones.map((z) => zoneLabel[z]).slice(0, 3).join(' · ')}</div></div><div class="sr">${it.sets}×${it.n}${e.hold ? 's' : ''}</div></div></li>`; }).join('')}</ul></details>`).join('')}
+        <p class="note" style="margin:0">Chaque séance commence par un échauffement et se termine par des étirements adaptés.</p></div>
+      ${ch ? `<div class="card"><div class="note">Défi conseillé pour aller plus loin</div><h3 class="prog-title">${esc(ch.title)}</h3><p class="lead" style="margin:0">${esc(ch.blurb)}</p></div>` : ''}`;
   }
   function tipCard(t) { return `<button class="ex-row" data-tip="${t.id}"><div><div class="n">${esc(t.title)}</div><div class="z">${esc(t.cat)}</div></div><div class="z">Lire</div></button>`; }
   function viewTip(t) {
@@ -622,7 +806,7 @@
       <p class="note">Conseils généraux, qui ne remplacent pas l'avis d'un médecin ou d'une sage-femme.</p>`;
   }
   function viewAccueil() {
-    if (!S.profile || state.editProfile) return viewOnboarding();
+    if (!S.profile || state.editProfile) return viewWizard();
     if (state.tip) return viewTip(window.CorpusTips.find((t) => t.id === state.tip));
     const pr = S.profile, gp = GOAL_PLAN[pr.goal];
     const tp = todayPlan();
@@ -635,6 +819,11 @@
       today = tp.done ? `<div class="row">${I.check}<b>Séance du jour validée.</b><span class="note">Repos bien mérité.</span></div>`
         : tp.plan ? `<p class="lead">${esc(tp.c.title)}, jour ${tp.day}${tp.plan.sub ? ' : ' + esc(tp.plan.sub) : ''}.</p><div class="row"><button class="btn accent" data-ch-go="${tp.c.id}">${I.play} C'est parti</button></div>`
         : `<p class="lead">${esc(tp.c.title)}, jour ${tp.day} : jour de repos. Une marche de 20 minutes est idéale.</p><div class="row"><button class="btn ghost sm" data-ch-rest="${tp.c.id}">Valider le repos</button></div>`;
+    } else if (tp && tp.kind === 'perso') {
+      const items = tp.ses.items.map((it) => ({ ex: byId[it.id], sets: it.sets, n: it.n }));
+      today = `<p class="lead"><b>${esc(tp.ses.title)}</b> · ${items.length} exercices · ~${estimateMin(items) + (S.settings.warm ? 4 : 0)} min</p>
+        <div class="chips">${zoneChips(programZones(items), 6)}</div>
+        <div class="row"><button class="btn accent" data-act="start-perso">${I.play} C'est parti</button>${tp.done ? '<span class="note">Déjà une séance aujourd\'hui, bravo !</span>' : ''}</div>`;
     } else if (tp) {
       const items = tp.p.items.map((it) => ({ ex: byId[it.id], sets: it.sets, n: it.n }));
       today = `<p class="lead"><b>${esc(tp.p.title)}</b> · ${items.length} exercices · ~${estimateMin(items) + (S.settings.warm ? 4 : 0)} min</p>
@@ -668,7 +857,11 @@
       <button class="btn accent" data-act="start-custom">${I.play} Démarrer</button></div>
       <ul class="ex-list">${S.custom.map((it, i) => { const ex = byId[it.id]; return `<li><div class="ex-row"><div><div class="n">${esc(ex.name)}</div><div class="z">${it.sets} × ${it.n}${ex.hold ? ' s' : ''}</div></div>
         <div class="row"><button class="btn ghost sm" data-cust="${i}" data-d="-1" aria-label="Moins">−</button><button class="btn ghost sm" data-cust="${i}" data-d="1" aria-label="Plus">+</button><button class="btn ghost sm" data-cust-del="${i}">Retirer</button></div></div></li>`; }).join('')}</ul></article>` : '';
-    return `${sessionCard()}
+    const perso = S.plan && S.plan.sessions ? `<div><h2>Mon programme</h2><p class="lead">Créé à partir de ton bilan. <button class="back" data-act="edit-profile" style="display:inline">Refaire mon bilan</button></p></div>
+      ${S.plan.sessions.map((ses, i) => { const items = ses.items.map((it) => ({ ex: byId[it.id], sets: it.sets, n: it.n })); return `<article class="card"><div class="row"><div class="grow"><h3 class="prog-title">${esc(ses.title)}</h3><div class="note">${items.length} exercices · ~${estimateMin(items) + (S.settings.warm ? 4 : 0)} min</div></div>${i === (S.planIdx || 0) % S.plan.sessions.length ? '<span class="tag acc">Prochaine</span>' : ''}</div>
+        <details><summary class="note">Voir les exercices</summary><ul class="ex-list">${items.map((it) => `<li><button class="ex-row" data-prev="${it.ex.id}"><div><div class="n">${esc(it.ex.name)}</div><div class="z">${it.ex.zones.map((z) => zoneLabel[z]).slice(0, 3).join(' · ')}</div></div><div class="sr">${it.sets}×${it.n}${it.ex.hold ? 's' : ''}</div></button></li>`).join('')}</ul></details>
+        <div class="row"><button class="btn accent" data-perso="${i}">${I.play} Démarrer</button></div></article>`; }).join('')}` : '';
+    return `${sessionCard()}${perso}
       <div><h2>Séances guidées</h2><p class="lead">${S.place === 'maison' ? 'À la maison, sans matériel ou avec une chaise et des haltères.' : 'En salle : machines, barres, poulies, plus tout ce qui se fait à la maison.'}</p></div>
       <div class="chips" role="group" aria-label="Pour qui">${AUD.map(([k, l]) => `<button class="chip" data-aud="${k}" aria-pressed="${aud === k}">${l}</button>`).join('')}</div>
       ${custom}
@@ -925,6 +1118,15 @@
     v.onclick = async (e) => {
       const t = e.target.closest('button'); if (!t) return;
       const d = t.dataset;
+      if (d.wz) {
+        const W = state.wiz, key = d.wz; let v = d.v;
+        if (/^\d+$/.test(v)) v = +v;
+        if (d.multi === '1') { const arr = W.d[key] || (W.d[key] = []); const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else { if (key === 'focus' && arr.length >= 4) { toast('Quatre zones maximum.'); return; } arr.push(v); } }
+        else W.d[key] = v;
+        if (key === 'place' && v === 'salle') W.d.equip = [];
+        render(); return;
+      }
+      if (d.perso !== undefined) { const ses = S.plan.sessions[+d.perso]; startSession({ title: ses.title, items: ses.items.map((x) => ({ ...x })), perso: +d.perso }); return; }
       if (d.pf) { const v = d.v === 'true' ? true : d.v === 'false' ? false : /^\d+$/.test(d.v) ? +d.v : d.v; state.draft[d.pf] = v; const nm = $('#pf-name'); if (nm) state.draft.name = nm.value; render(); }
       else if (d.tip) { state.tip = d.tip; render(); $('#panel').scrollTop = 0; }
       else if (d.aud) { S.aud = d.aud; save(); render(); }
@@ -951,6 +1153,24 @@
       } else {
         switch (d.act) {
           case 'stop': stopSession(); break;
+          case 'wz-next': case 'wz-back': {
+            const W = state.wiz;
+            const nm = $('#wz-name'); if (nm) W.d.name = nm.value.trim().slice(0, 30);
+            const h = $('#wz-height'), w = $('#wz-weight'); if (h) W.d.height = h.value ? +h.value : null; if (w) W.d.weight = w.value ? +w.value : null;
+            W.i = Math.max(0, Math.min(WIZ.length - 1, W.i + (d.act === 'wz-next' ? 1 : -1)));
+            render(); $('#panel').scrollTop = 0; break;
+          }
+          case 'wz-finish': {
+            const W = state.wiz, first = !S.profile, dr = W.d;
+            S.profile = dr; S.plan = W.plan; S.planIdx = 0; state.wiz = null; state.editProfile = false;
+            if (dr.weight) S.measures.push({ id: String(Date.now()), date: ymd(), poids: dr.weight });
+            S.aud = dr.goal === 'grossesse' ? 'prenatal' : dr.goal === 'senior' ? 'senior' : dr.sex === 'f' ? 'femme' : 'homme';
+            if (first) { S.settings.coach = dr.sex; if (E.custom && E.custom.builtin) E.clearModel(true); E.setAvatar(avatarCfg()); applyRealistic(); updateCoachUi(); Voice.pick(); }
+            save(); setPlace(dr.place); lockTabs(); $('#panel').scrollTop = 0; window.scrollTo(0, 0);
+            Voice.say(`${dr.name ? dr.name + ', ton' : 'Ton'} programme est prêt. ${dr.freq} séances par semaine, et je serai là à chaque répétition. On commence quand tu veux !`, { wait: false });
+            break;
+          }
+          case 'start-perso': { const tp = todayPlan(); if (tp && tp.kind === 'perso') startSession({ title: tp.ses.title, items: tp.ses.items.map((x) => ({ ...x })), perso: tp.idx }); break; }
           case 'save-profile': {
             const first = !S.profile;
             const dr = Object.assign({}, state.draft, { name: ($('#pf-name').value || '').trim().slice(0, 30) });
@@ -961,8 +1181,8 @@
             if (first) Voice.say(`Enchanté${dr.sex === 'f' ? 'e' : ''}${dr.name ? ' ' + dr.name : ''} ! Je suis ${coach().name}, ton coach. Ton programme est prêt.`, { wait: false });
             break;
           }
-          case 'cancel-profile': state.editProfile = false; state.draft = null; render(); break;
-          case 'edit-profile': state.editProfile = true; state.draft = Object.assign({}, S.profile); state.tab = 'accueil'; render(); break;
+          case 'cancel-profile': state.editProfile = false; state.draft = null; state.wiz = null; render(); break;
+          case 'edit-profile': state.editProfile = true; state.wiz = null; state.tab = 'accueil'; render(); $('#panel').scrollTop = 0; break;
           case 'tip-back': state.tip = null; render(); break;
           case 'cloud-send': { const em = ($('#cl-email').value || '').trim(); state.clEmail = em; state.clErr = null; if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { state.clErr = 'Adresse e-mail invalide.'; render(); break; } try { await window.CorpusCloud.sendCode(em); state.clSent = true; toast('Code envoyé. Regarde ta boîte mail.'); } catch (err) { state.clErr = err.message; } render(); break; }
           case 'cloud-verify': { try { await window.CorpusCloud.verify(state.clEmail, ($('#cl-code').value || '').trim()); state.clSent = false; state.clErr = null; toast('Connecté. Tes données sont sauvegardées en ligne.'); } catch (err) { state.clErr = err.message; } render(); break; }
@@ -1002,6 +1222,7 @@
       } else if (t.id === 's-voice') { S.settings.voice = t.checked; if (!t.checked) Voice.stop(); save(); renderControls(); }
       else if (t.id === 's-count') { S.settings.count = t.checked; save(); }
       else if (t.id === 's-cues') { S.settings.cues = t.checked; save(); }
+      else if (t.id === 'wz-ok') { state.wiz.d.okHealth = t.checked; render(); }
       else if (t.id === 's-warm') { S.settings.warm = t.checked; save(); }
       else if (t.id === 's-real') { S.settings.realistic = t.checked; save(); if (!t.checked && E.custom && E.custom.builtin) E.clearModel(); else applyRealistic(); render(); }
       else if (t.id === 's-listen') { S.settings.listen = t.checked; save(); Listen.sync(); }
@@ -1067,7 +1288,7 @@
     const re = () => setTimeout(() => E.applyTheme && E.applyTheme(), 30);
     mq.addEventListener && mq.addEventListener('change', re);
     new MutationObserver(re).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    render();
+    render(); lockTabs();
     if ('serviceWorker' in navigator && location.protocol === 'https:' && !/claude\.ai|claudeusercontent/.test(location.host)) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
