@@ -880,7 +880,7 @@
     E.plants = computePlants(E.rig, ex);
     ex._plants = E.plants;
     dynProps = buildProps(E.rig, ex, propGroup);
-    if (!opt.keepView) { E.userOrbit = false; E.setView(E.view); }
+    if (!opt.keepView) { E.userOrbit = false; E.setView('auto'); }
   };
 
   const VIEWS = { face: 0, tq: 32, side: 90, back: 180 };
@@ -960,7 +960,7 @@
       }
       for (const d of dynProps) d.update && d.update();
       updateTail(dt);
-      if (E.custom) retarget();
+      if (E.custom) { retarget(); animateFace(E.custom); }
       // caméra qui suit le corps
       const c = bodyCenter();
       const delta = V().subVectors(c, controls.target).multiplyScalar(1 - Math.exp(-dt * 3));
@@ -1034,13 +1034,16 @@
     const missing = need.filter((k) => !B[k]);
     if (missing.length) throw new Error('Squelette non reconnu (os manquants : ' + missing.join(', ') + ').');
     scene.updateMatrixWorld(true);
+    // Unités : un modèle en centimètres (hauteur > 3) est ramené en mètres
+    let box0 = new THREE.Box3().setFromObject(scene);
+    if (box0.max.y - box0.min.y > 3) { scene.scale.multiplyScalar(0.01); scene.updateMatrixWorld(true); }
     // Pieds au sol
     const box = new THREE.Box3().setFromObject(scene);
     scene.position.y -= box.min.y; scene.updateMatrixWorld(true);
     // Orientation : le modèle doit regarder vers +Z (gauche du personnage vers +X)
     if (wpos(B.armL).x < wpos(B.armR).x) { scene.rotation.y += Math.PI; scene.updateMatrixWorld(true); }
     const DOWN = V(0, -1, 0), UPV = V(0, 1, 0);
-    const chain = [[B.hips, B.spine], [B.spine, B.spine1 || B.neck], [B.spine1, B.spine2 || B.neck], [B.spine2, B.neck], [B.neck, B.head]];
+    const chain = [[B.hips, B.spine], [B.spine, B.spine1 || B.neck], [B.spine1, B.spine2 || B.neck]];
     for (const [a, c] of chain) if (a && c) alignSeg(a, c, UPV);
     for (const s of ['L', 'R']) {
       alignSeg(B['arm' + s], B['forearm' + s], DOWN);
@@ -1082,12 +1085,76 @@
     hips.position.copy(hips.parent.worldToLocal(hp));
     for (const [tk, src] of MAP) {
       const bone = C.B[tk]; if (!bone || !C.rest[tk]) continue;
+      if (tk === 'head') { /* la tête est posée ci-dessous puis le visage s'anime */ }
       if (Array.isArray(src)) { rig.b[src[0]].getWorldQuaternion(_qa); rig.b[src[1]].getWorldQuaternion(_qb); _qa.slerp(_qb, 0.5); }
       else rig.b[src].getWorldQuaternion(_qa);
       setWorldQuat(bone, _qa.multiply(C.rest[tk]));
     }
   }
+  // Charge un personnage FBX (ex. Microsoft Rocketbox) et ses textures web.
+  E.loadFBXAvatar = function (url, texDir) {
+    return new Promise((res, rej) => {
+      if (!THREE.FBXLoader) return rej(new Error('Chargeur FBX indisponible.'));
+      const mgr = new THREE.LoadingManager();
+      const blank = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkaAcAAIUAgUW0RjgAAAAASUVORK5CYII=';
+      mgr.setURLModifier((u) => {
+        const b = u.split(/[\\/]/).pop();
+        if (!/\.(tga|png|jpg|jpeg|dds|tif)$/i.test(b)) return u;
+        if (/specular/i.test(b)) return blank;
+        return texDir + b.replace(/\.(tga|png|jpg|jpeg|dds|tif)$/i, /opacity/i.test(b) ? '.png' : '.jpg');
+      });
+      const texLoader = new THREE.TextureLoader(mgr);
+      mgr.addHandler(/\.(tga|dds|tif)$/i, texLoader);
+      const onObj = (obj) => {
+        obj.traverse((o) => {
+          if (!o.isMesh) return;
+          const mats = [].concat(o.material).map((m) => {
+            const isHair = /opacity|hair|lash/i.test(m.name);
+            if (m.map) m.map.encoding = THREE.sRGBEncoding;
+            const nm = isHair
+              ? new THREE.MeshStandardMaterial({ map: m.map, normalMap: m.normalMap || null, roughness: 0.55, metalness: 0, alphaTest: 0.3, alphaToCoverage: true, side: THREE.DoubleSide })
+              : new THREE.MeshPhysicalMaterial({ map: m.map, normalMap: m.normalMap || null, normalScale: new THREE.Vector2(0.8, 0.8), roughness: /head/i.test(m.name) ? 0.52 : 0.68, metalness: 0, sheen: 0.3, sheenRoughness: 0.6, sheenColor: new THREE.Color(0xffe2d4) });
+            nm.name = m.name;
+            return nm;
+          });
+          o.material = Array.isArray(o.material) ? mats : mats[0];
+          o.castShadow = true; o.receiveShadow = true;
+        });
+        res(obj);
+      };
+      const ld = new THREE.FBXLoader(mgr);
+      if (url instanceof ArrayBuffer) { try { onObj(ld.parse(url, texDir)); } catch (err) { rej(new Error('Impossible de lire le personnage.')); } }
+      else ld.load(url, onObj, undefined, () => rej(new Error('Impossible de charger le personnage.')));
+    });
+  };
+
+  // Visage vivant : clignement des yeux et mâchoire qui bouge quand le coach parle.
+  function animateFace(C) {
+    const f = C.face; if (!f) return;
+    const t = performance.now() / 1000;
+    if (t > (f.nextBlink || 0)) { f.blinkStart = t; f.nextBlink = t + 2.5 + Math.random() * 3.5; }
+    const bk = f.blinkStart ? Math.max(0, 1 - Math.abs((t - f.blinkStart) - 0.07) / 0.07) : 0;
+    for (const lid of f.lidsTop) { lid.bone.position.copy(lid.rest).addScaledVector(lid.dir, bk * lid.amt); }
+    if (f.jaw) {
+      const open = E.speaking ? Math.max(0, Math.sin(t * 17) * 0.5 + Math.sin(t * 9.3) * 0.5) * 0.14 : 0;
+      f.jawOpen = (f.jawOpen || 0) + (open - (f.jawOpen || 0)) * 0.35;
+      f.jaw.quaternion.copy(f.jawRest).multiply(_qa.setFromAxisAngle(f.jawAxis, f.jawOpen));
+    }
+  }
+  function setupFace(prepared) {
+    const sc = prepared.scene, byName = {};
+    sc.traverse((o) => { if (o.isBone) byName[o.name.toLowerCase().replace(/[^a-z]/g, '')] = o; });
+    const jaw = byName.bipmjaw || byName.jaw || null;
+    const lidsTop = [];
+    for (const k of ['bipleyeblinktop', 'bipreyeblinktop']) {
+      const bn = byName[k], bot = byName[k.replace('top', 'bottom')];
+      if (bn && bot) { const dir = bot.position.clone().sub(bn.position); const amt = dir.length() * 0.9; lidsTop.push({ bone: bn, rest: bn.position.clone(), dir: dir.normalize(), amt }); }
+    }
+    prepared.face = (jaw || lidsTop.length) ? { jaw, jawRest: jaw ? jaw.quaternion.clone() : null, jawAxis: V(0, 0, 1), lidsTop } : null;
+  }
+
   E.useModel = function (prepared) {
+    setupFace(prepared);
     E.clearModel(true);
     E.custom = prepared;
     avatarHolder.add(prepared.scene);

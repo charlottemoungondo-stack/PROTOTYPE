@@ -35,7 +35,7 @@
   /* ---------- Données locales ---------- */
   const KEY = 'corpus.v1', PKEY = 'corpus.photos.v1';
   const DEFAULTS = {
-    settings: { coach: 'f', skin: 2, hair: 0, outfit: 0, voice: true, voiceURI: '', count: true, cues: true, tempo: 'normal', rest: 30, warm: true, listen: false },
+    settings: { coach: 'f', skin: 2, hair: 0, outfit: 0, voice: true, voiceURI: '', count: true, cues: true, tempo: 'normal', rest: 30, warm: true, listen: false, realistic: true },
     place: 'maison', aud: 'tous', custom: [], history: [], challenges: {}, measures: [], profile: null,
   };
   function load(k, fb) { try { const v = JSON.parse(localStorage.getItem(k)); return v || fb; } catch (e) { return fb; } }
@@ -136,6 +136,39 @@
     try { const rec = await IDB.get('avatar'); if (rec && rec.buf) { await loadModel(rec.buf, rec.name); modelState.name = rec.name; if (state.tab === 'reglages') render(); } } catch (e) { /* aucun modèle enregistré */ }
   }
 
+  /* ---------- Coachs réalistes intégrés (Microsoft Rocketbox, licence MIT) ---------- */
+  const REAL = { f: 'avatars/coach-f.js', m: 'avatars/coach-m.js' };
+  function loadAvatarData(sex) {
+    return new Promise((res, rej) => {
+      const have = () => window.CORPUS_AVATARS && window.CORPUS_AVATARS[sex];
+      const decode = () => { const b64 = window.CORPUS_AVATARS[sex]; const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; };
+      if (have()) return res(decode());
+      const sc = document.createElement('script'); sc.src = REAL[sex];
+      sc.onload = () => (have() ? res(decode()) : rej(new Error('Personnage introuvable.')));
+      sc.onerror = () => rej(new Error('Personnage introuvable.'));
+      document.head.appendChild(sc);
+    });
+  }
+  const realCache = {};
+  let realToken = 0;
+  async function applyRealistic() {
+    const tok = ++realToken;
+    if (modelState.name) return; // un modèle importé par l'utilisateur a la priorité
+    if (!S.settings.realistic || !THREE.FBXLoader) { if (E.custom && E.custom.builtin) E.clearModel(); return; }
+    const sex = S.settings.coach;
+    try {
+      if (!realCache[sex]) {
+        $('#loading').hidden = false; $('#loading').textContent = `Arrivée de ${coach().name}…`;
+        const obj = await E.loadFBXAvatar(await loadAvatarData(sex), 'avatars/');
+        realCache[sex] = E.prepareModel(obj);
+        realCache[sex].builtin = true;
+      }
+      if (tok !== realToken || modelState.name) return;
+      E.useModel(realCache[sex]);
+    } catch (err) { console.warn(err); }
+    $('#loading').hidden = true;
+  }
+
   /* ---------- Commandes vocales ---------- */
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const Listen = {
@@ -169,7 +202,7 @@
     },
   };
 
-  function speaking(on) { $('#coach-line').classList.toggle('speaking', on); }
+  function speaking(on) { $('#coach-line').classList.toggle('speaking', on); E.speaking = on; }
   function setCoachText(t) { $('#coach-text').textContent = t; }
   const sleepPlain = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -838,16 +871,18 @@
       <div><h2>Ton coach</h2><p class="lead">Choisis la personne qui t'accompagne, son apparence et sa voix.</p></div>
       <div class="setting"><span>Coach</span><div class="seg" role="group">
         <button data-set="coach" data-v="f" aria-pressed="${st.coach === 'f'}">Léa</button><button data-set="coach" data-v="m" aria-pressed="${st.coach === 'm'}">Malik</button></div></div>
-      <div class="card"><h3>Avatar réaliste (bêta)</h3>
+      <label class="toggle card">Coach réaliste (personnage humain photographié)<input type="checkbox" id="s-real" ${st.realistic ? 'checked' : ''}></label>
+      <div class="card"><h3>Importer ton propre avatar (bêta)</h3>
         <p class="note">Importe un personnage 3D humain au format .glb avec un squelette standard (Mixamo, Character Creator, MakeHuman, Unity/VRM). Le coach reprend tous ses mouvements avec ce corps. Le fichier reste sur cet appareil.</p>
         ${modelState.name ? `<div class="row">${I.check}<b>${esc(modelState.name)}</b><button class="btn ghost sm" data-act="clear-model">Revenir à l'avatar intégré</button></div>` : ''}
         ${modelState.loading ? '<div class="note">Chargement du modèle…</div>' : ''}
         ${modelState.error ? `<div class="safety">${esc(modelState.error)} Vérifie que le personnage a un squelette humanoïde complet (bassin, colonne, bras, jambes).</div>` : ''}
         <label class="btn ghost sm" style="justify-self:start">Importer un fichier .glb<input type="file" id="model-file" accept=".glb,model/gltf-binary" hidden></label>
       </div>
-      <div class="setting"><span>Peau</span><div class="swatches">${SKINS.map((c, i) => `<button class="sw" style="background:${c}" data-set="skin" data-v="${i}" aria-pressed="${st.skin === i}" aria-label="Teinte ${i + 1}"></button>`).join('')}</div></div>
-      <div class="setting"><span>Cheveux</span><div class="swatches">${HAIRS.map((c, i) => `<button class="sw" style="background:${c}" data-set="hair" data-v="${i}" aria-pressed="${st.hair === i}" aria-label="Couleur ${i + 1}"></button>`).join('')}</div></div>
-      <div class="setting"><span>Tenue</span><div class="swatches">${OUTFITS.map((o, i) => `<button class="sw duo" style="--a:${o.top};--b:${o.bottom}" data-set="outfit" data-v="${i}" aria-pressed="${st.outfit === i}" aria-label="${o.n}"></button>`).join('')}</div></div>
+      ${st.realistic || modelState.name ? '<p class="note">Peau, cheveux et tenue se règlent sur l\'avatar stylisé (décoche « Coach réaliste »).</p>' : ''}
+      <div class="setting" ${st.realistic || modelState.name ? 'hidden' : ''}><span>Peau</span><div class="swatches">${SKINS.map((c, i) => `<button class="sw" style="background:${c}" data-set="skin" data-v="${i}" aria-pressed="${st.skin === i}" aria-label="Teinte ${i + 1}"></button>`).join('')}</div></div>
+      <div class="setting" ${st.realistic || modelState.name ? 'hidden' : ''}><span>Cheveux</span><div class="swatches">${HAIRS.map((c, i) => `<button class="sw" style="background:${c}" data-set="hair" data-v="${i}" aria-pressed="${st.hair === i}" aria-label="Couleur ${i + 1}"></button>`).join('')}</div></div>
+      <div class="setting" ${st.realistic || modelState.name ? 'hidden' : ''}><span>Tenue</span><div class="swatches">${OUTFITS.map((o, i) => `<button class="sw duo" style="--a:${o.top};--b:${o.bottom}" data-set="outfit" data-v="${i}" aria-pressed="${st.outfit === i}" aria-label="${o.n}"></button>`).join('')}</div></div>
       <div class="card">
         <label class="toggle">Voix du coach<input type="checkbox" id="s-voice" ${st.voice ? 'checked' : ''}></label>
         <label class="toggle">Compter les répétitions à voix haute<input type="checkbox" id="s-count" ${st.count ? 'checked' : ''}></label>
@@ -862,6 +897,7 @@
       </div>
       <div class="setting"><span>Rythme des répétitions</span><div class="seg" role="group">${Object.keys(TEMPO).map((k) => `<button data-set="tempo" data-v="${k}" aria-pressed="${st.tempo === k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div></div>
       <div class="setting"><span>Repos entre les séries</span><div class="seg" role="group">${[20, 30, 45, 60, 90].map((k) => `<button data-set="rest" data-v="${k}" aria-pressed="${st.rest === k}">${k} s</button>`).join('')}</div></div>
+      <p class="note">Coachs réalistes : personnages Microsoft Rocketbox, licence MIT.</p>
       <div class="card"><h3>Mes données</h3><p class="note">Séances, défis, mesures et photos sont stockés uniquement dans ce navigateur.</p>
         ${state.confirm === 'reset' ? `<div class="confirm"><span>Tout effacer, photos comprises ?</span><button class="btn sm" data-act="reset">Tout effacer</button><button class="btn ghost sm" data-act="cancel">Annuler</button></div>` : `<button class="btn ghost sm" data-confirm="reset" style="justify-self:start">Effacer mes données</button>`}
       </div>`;
@@ -910,7 +946,7 @@
         const key = d.set; let val = d.v;
         if (['skin', 'hair', 'outfit', 'rest'].includes(key)) val = +val;
         S.settings[key] = val; save();
-        if (['coach', 'skin', 'hair', 'outfit'].includes(key)) { E.setAvatar(avatarCfg()); updateCoachUi(); if (key === 'coach') { Voice.pick(); Voice.say(`Salut, c'est ${coach().name}. C'est moi qui t'accompagne maintenant.`, { wait: false, interrupt: true }); } }
+        if (['coach', 'skin', 'hair', 'outfit'].includes(key)) { if (!E.custom || key === 'coach') { if (E.custom && E.custom.builtin) E.clearModel(true); E.setAvatar(avatarCfg()); applyRealistic(); } updateCoachUi(); if (key === 'coach') { Voice.pick(); Voice.say(`Salut, c'est ${coach().name}. C'est moi qui t'accompagne maintenant.`, { wait: false, interrupt: true }); } }
         render();
       } else {
         switch (d.act) {
@@ -919,7 +955,7 @@
             const first = !S.profile;
             const dr = Object.assign({}, state.draft, { name: ($('#pf-name').value || '').trim().slice(0, 30) });
             S.profile = dr; state.draft = null; state.editProfile = false;
-            if (first) { S.settings.coach = dr.sex; S.aud = dr.sex === 'f' ? 'femme' : 'homme'; E.setAvatar(avatarCfg()); updateCoachUi(); Voice.pick(); }
+            if (first) { S.settings.coach = dr.sex; S.aud = dr.sex === 'f' ? 'femme' : 'homme'; if (E.custom && E.custom.builtin) E.clearModel(true); E.setAvatar(avatarCfg()); applyRealistic(); updateCoachUi(); Voice.pick(); }
             if (dr.goal === 'grossesse') S.aud = 'prenatal'; else if (dr.goal === 'senior') S.aud = 'senior';
             save(); setPlace(dr.place);
             if (first) Voice.say(`Enchanté${dr.sex === 'f' ? 'e' : ''}${dr.name ? ' ' + dr.name : ''} ! Je suis ${coach().name}, ton coach. Ton programme est prêt.`, { wait: false });
@@ -931,7 +967,7 @@
           case 'cloud-send': { const em = ($('#cl-email').value || '').trim(); state.clEmail = em; state.clErr = null; if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { state.clErr = 'Adresse e-mail invalide.'; render(); break; } try { await window.CorpusCloud.sendCode(em); state.clSent = true; toast('Code envoyé. Regarde ta boîte mail.'); } catch (err) { state.clErr = err.message; } render(); break; }
           case 'cloud-verify': { try { await window.CorpusCloud.verify(state.clEmail, ($('#cl-code').value || '').trim()); state.clSent = false; state.clErr = null; toast('Connecté. Tes données sont sauvegardées en ligne.'); } catch (err) { state.clErr = err.message; } render(); break; }
           case 'cloud-out': await window.CorpusCloud.signOut(); toast('Déconnecté.'); render(); break;
-          case 'clear-model': E.clearModel(); modelState.name = null; IDB.del('avatar'); render(); toast('Avatar intégré rétabli.'); break;
+          case 'clear-model': E.clearModel(); modelState.name = null; IDB.del('avatar'); applyRealistic(); render(); toast('Avatar intégré rétabli.'); break;
           case 'start-custom': startSession({ title: 'Ma séance', items: S.custom.map((x) => ({ ...x })) }); break;
           case 'ex-back': state.exDetail = null; render(); break;
           case 'other-side': { const cur = E.ex; if (cur && !run) { E.setExercise(E.mirror(cur)); E.setMode('loop'); } break; }
@@ -967,6 +1003,7 @@
       else if (t.id === 's-count') { S.settings.count = t.checked; save(); }
       else if (t.id === 's-cues') { S.settings.cues = t.checked; save(); }
       else if (t.id === 's-warm') { S.settings.warm = t.checked; save(); }
+      else if (t.id === 's-real') { S.settings.realistic = t.checked; save(); if (!t.checked && E.custom && E.custom.builtin) E.clearModel(); else applyRealistic(); render(); }
       else if (t.id === 's-listen') { S.settings.listen = t.checked; save(); Listen.sync(); }
       else if (t.id === 's-vsel') { S.settings.voiceURI = t.value; save(); Voice.pick(); }
     };
@@ -1020,7 +1057,7 @@
     preview(state.previewEx, false);
     setCoachText(`Salut, c'est ${coach().name} ! Choisis une séance, ou touche un exercice pour le voir en 3D.`);
     Voice.init();
-    if (window.indexedDB) restoreModel();
+    if (window.indexedDB) restoreModel().then(applyRealistic); else applyRealistic();
     const C = window.CorpusCloud;
     if (C && C.enabled) {
       C.onChange(() => { if (state.tab === 'reglages' || state.tab === 'accueil') render(); });
